@@ -60,9 +60,73 @@ import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfYe
 import { Transaction, DEFAULT_CATEGORIES, Card, Goal } from './types';
 import { cn } from './utils';
 
-const INITIAL_CARDS: Card[] = [];
+const IS_DEMO = import.meta.env.VITE_DEMO_MODE === 'true';
 
-const INITIAL_TRANSACTIONS: Transaction[] = [];
+const DEMO_CARDS: Card[] = [
+  { id: '1', name: 'Chase Sapphire', gradient: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)', scale: 1, rotate: -3, font: 'font-mono', balance: 4820.50, cardNumber: '4532 •••• •••• 8821', expiryDate: '08/27' },
+  { id: '2', name: 'Amex Gold', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', scale: 0.95, rotate: 2, font: 'font-sans', balance: 1240.00, cardNumber: '3782 •••• •••• 1005', expiryDate: '11/26' },
+];
+
+const DEMO_GOALS = [
+  { id: 'g1', name: 'Emergency Fund', target: 10000, current: 6400, color: '#2dd4bf' },
+  { id: 'g2', name: 'New MacBook Pro', target: 2500, current: 1850, color: '#8b5cf6' },
+  { id: 'g3', name: 'Summer Vacation', target: 5000, current: 2100, color: '#f59e0b' },
+];
+
+const DEMO_TRANSACTIONS: Transaction[] = [
+  // January income
+  { id: 't01', amount: 5200, category: 'Salary', description: 'Monthly Salary — Acme Corp', date: '2026-01-01', type: 'income' },
+  { id: 't02', amount: 320, category: 'Investment', description: 'Dividend Payment', date: '2026-01-15', type: 'income' },
+  // January expenses
+  { id: 't03', amount: 1450, category: 'Bills', description: 'Rent', date: '2026-01-02', type: 'expense' },
+  { id: 't04', amount: 94.80, category: 'Food', description: 'Trader Joe\'s', date: '2026-01-04', type: 'expense' },
+  { id: 't05', amount: 14.99, category: 'Entertainment', description: 'Netflix', date: '2026-01-05', type: 'expense' },
+  { id: 't06', amount: 52.40, category: 'Transport', description: 'Uber — weekly', date: '2026-01-07', type: 'expense' },
+  { id: 't07', amount: 189.99, category: 'Shopping', description: 'Nike — Running Shoes', date: '2026-01-09', type: 'expense' },
+  { id: 't08', amount: 73.20, category: 'Food', description: 'Whole Foods', date: '2026-01-11', type: 'expense' },
+  { id: 't09', amount: 140, category: 'Health', description: 'Gym Membership', date: '2026-01-12', type: 'expense' },
+  { id: 't10', amount: 9.99, category: 'Entertainment', description: 'Spotify', date: '2026-01-13', type: 'expense' },
+  { id: 't11', amount: 38.50, category: 'Food', description: 'Chipotle × 4', date: '2026-01-16', type: 'expense' },
+  { id: 't12', amount: 120, category: 'Bills', description: 'Electricity', date: '2026-01-18', type: 'expense' },
+  { id: 't13', amount: 45, category: 'Transport', description: 'Gas Station', date: '2026-01-20', type: 'expense' },
+  { id: 't14', amount: 299, category: 'Shopping', description: 'Apple — AirPods Pro', date: '2026-01-22', type: 'expense' },
+  { id: 't15', amount: 62.10, category: 'Food', description: 'Instacart Delivery', date: '2026-01-25', type: 'expense' },
+  { id: 't16', amount: 18, category: 'Entertainment', description: 'Movie Tickets', date: '2026-01-27', type: 'expense' },
+  // February income
+  { id: 't17', amount: 5200, category: 'Salary', description: 'Monthly Salary — Acme Corp', date: '2026-02-01', type: 'income' },
+  { id: 't18', amount: 150, category: 'Other', description: 'Freelance Design Work', date: '2026-02-14', type: 'income' },
+  // February expenses
+  { id: 't19', amount: 1450, category: 'Bills', description: 'Rent', date: '2026-02-02', type: 'expense' },
+  { id: 't20', amount: 88.40, category: 'Food', description: 'Trader Joe\'s', date: '2026-02-03', type: 'expense' },
+  { id: 't21', amount: 14.99, category: 'Entertainment', description: 'Netflix', date: '2026-02-05', type: 'expense' },
+  { id: 't22', amount: 67.80, category: 'Transport', description: 'Uber — weekly', date: '2026-02-06', type: 'expense' },
+  { id: 't23', amount: 112, category: 'Bills', description: 'Electricity', date: '2026-02-08', type: 'expense' },
+  { id: 't24', amount: 55.90, category: 'Food', description: 'Whole Foods', date: '2026-02-10', type: 'expense' },
+  { id: 't25', amount: 9.99, category: 'Entertainment', description: 'Spotify', date: '2026-02-13', type: 'expense' },
+  { id: 't26', amount: 420, category: 'Shopping', description: 'SSENSE — Jacket', date: '2026-02-14', type: 'expense' },
+  { id: 't27', amount: 41.20, category: 'Food', description: 'Chipotle × 4', date: '2026-02-17', type: 'expense' },
+  { id: 't28', amount: 85, category: 'Health', description: 'Doctor Visit Copay', date: '2026-02-19', type: 'expense' },
+  { id: 't29', amount: 38, category: 'Transport', description: 'Gas Station', date: '2026-02-21', type: 'expense' },
+  { id: 't30', amount: 140, category: 'Health', description: 'Gym Membership', date: '2026-02-22', type: 'expense' },
+  { id: 't31', amount: 74.50, category: 'Food', description: 'Instacart Delivery', date: '2026-02-24', type: 'expense' },
+  { id: 't32', amount: 29.99, category: 'Entertainment', description: 'YouTube Premium + games', date: '2026-02-27', type: 'expense' },
+  // March income
+  { id: 't33', amount: 5200, category: 'Salary', description: 'Monthly Salary — Acme Corp', date: '2026-03-01', type: 'income' },
+  // March expenses
+  { id: 't34', amount: 1450, category: 'Bills', description: 'Rent', date: '2026-03-02', type: 'expense' },
+  { id: 't35', amount: 91.60, category: 'Food', description: 'Trader Joe\'s', date: '2026-03-04', type: 'expense' },
+  { id: 't36', amount: 14.99, category: 'Entertainment', description: 'Netflix', date: '2026-03-05', type: 'expense' },
+  { id: 't37', amount: 59.40, category: 'Transport', description: 'Uber — weekly', date: '2026-03-07', type: 'expense' },
+  { id: 't38', amount: 108, category: 'Bills', description: 'Electricity', date: '2026-03-09', type: 'expense' },
+  { id: 't39', amount: 140, category: 'Health', description: 'Gym Membership', date: '2026-03-12', type: 'expense' },
+  { id: 't40', amount: 9.99, category: 'Entertainment', description: 'Spotify', date: '2026-03-13', type: 'expense' },
+  { id: 't41', amount: 67.30, category: 'Food', description: 'Whole Foods', date: '2026-03-15', type: 'expense' },
+  { id: 't42', amount: 349, category: 'Investment', description: 'ETF Purchase — VOO', date: '2026-03-16', type: 'expense' },
+  { id: 't43', amount: 44.80, category: 'Transport', description: 'Gas Station', date: '2026-03-18', type: 'expense' },
+];
+
+const INITIAL_CARDS: Card[] = IS_DEMO ? DEMO_CARDS : [];
+const INITIAL_TRANSACTIONS: Transaction[] = IS_DEMO ? DEMO_TRANSACTIONS : [];
 
 const COLORS = ['#2dd4bf', '#06b6d4', '#4f46e5', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#71717a'];
 
@@ -83,6 +147,7 @@ const CARD_GRADIENTS = [
 
 export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    if (IS_DEMO) return DEMO_TRANSACTIONS;
     const saved = localStorage.getItem('transactions');
     return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
   });
@@ -118,6 +183,7 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [isSmartImportOpen, setIsSmartImportOpen] = useState(false);
   const [goals, setGoals] = useState<Goal[]>(() => {
+    if (IS_DEMO) return DEMO_GOALS;
     const saved = localStorage.getItem('goals');
     return saved ? JSON.parse(saved) : [];
   });

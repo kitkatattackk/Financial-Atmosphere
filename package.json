@@ -12,17 +12,22 @@
     "lint": "tsc --noEmit",
     "electron": "NODE_ENV=development electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && electron-builder --mac"
+    "electron:build": "npm run build && electron-builder --mac",
+    "build:demo": "VITE_DEMO_MODE=true vite build",
+    "electron:build:demo:win": "npm run build:demo && electron-builder --win dir --x64 && node scripts/zip-demo.mjs"
   },
   "build": {
     "appId": "com.expense.tracker",
-    "productName": "Expense Tracker",
+    "productName": "Financial Atmosphere",
     "files": [
       "dist/**/*",
       "electron/main.cjs"
     ],
     "mac": {
       "category": "public.app-category.finance"
+    },
+    "win": {
+      "target": [{ "target": "dir", "arch": ["x64"] }]
     }
   },
   "dependencies": {
