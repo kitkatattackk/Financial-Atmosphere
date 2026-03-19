@@ -21,7 +21,8 @@
     "productName": "Financial Atmosphere",
     "files": [
       "dist/**/*",
-      "electron/main.cjs"
+      "electron/main.cjs",
+      "!**/node_modules/**"
     ],
     "mac": {
       "category": "public.app-category.finance"
