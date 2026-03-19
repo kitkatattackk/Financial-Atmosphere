@@ -5,16 +5,17 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Plus, 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
-  Calendar, 
-  Tag, 
-  X, 
-  Trash2, 
-  ArrowUpRight, 
+import { GoogleGenAI } from '@google/genai';
+import {
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Calendar,
+  Tag,
+  X,
+  Trash2,
+  ArrowUpRight,
   ArrowDownLeft,
   PieChart as PieChartIcon,
   LayoutDashboard,
@@ -33,7 +34,10 @@ import {
   Download,
   Upload,
   Target,
-  Zap
+  Zap,
+  Sparkles,
+  CheckCircle2,
+  Circle
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { 
@@ -54,28 +58,9 @@ import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfYe
 import { Transaction, DEFAULT_CATEGORIES, Card } from './types';
 import { cn } from './utils';
 
-// Mock Data
-const INITIAL_CARDS: Card[] = [
-  {
-    id: '1',
-    name: 'Primary Card',
-    gradient: 'linear-gradient(135deg, #2dd4bf 0%, #06b6d4 100%)',
-    scale: 1,
-    rotate: 0,
-    font: 'font-sans',
-    balance: 2500,
-    cardNumber: '4582 1234 5678 9012',
-    expiryDate: '09/28'
-  }
-];
+const INITIAL_CARDS: Card[] = [];
 
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  { id: '1', amount: 2500, category: 'Salary', description: 'Monthly Salary', date: '2026-03-01', type: 'income' },
-  { id: '2', amount: 120, category: 'Food', description: 'Grocery Shopping', date: '2026-03-05', type: 'expense' },
-  { id: '3', amount: 50, category: 'Entertainment', description: 'Movie Night', date: '2026-03-10', type: 'expense' },
-  { id: '4', amount: 300, category: 'Investment', description: 'Stock Purchase', date: '2026-03-12', type: 'expense' },
-  { id: '5', amount: 80, category: 'Transport', description: 'Fuel', date: '2026-03-15', type: 'expense' },
-];
+const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 const COLORS = ['#2dd4bf', '#06b6d4', '#4f46e5', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#71717a'];
 
@@ -126,6 +111,9 @@ export default function App() {
   const [endDate, setEndDate] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [isSmartImportOpen, setIsSmartImportOpen] = useState(false);
+
+  const currentCard = cards[currentCardIndex];
 
   useEffect(() => {
     if (toast) {
@@ -428,26 +416,33 @@ export default function App() {
                 
                 <div className="flex flex-col items-center py-8 overflow-hidden">
                   <AnimatePresence mode="wait">
-                    <motion.div
-                      key={currentCardIndex}
-                      initial={{ opacity: 0, x: 60, scale: 0.95 }}
-                      animate={{ opacity: 1, x: 0, scale: 1 }}
-                      exit={{ opacity: 0, x: -60, scale: 0.95 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      className="w-full flex justify-center"
-                    >
-                      <VirtualCard
-                        gradient={cards[currentCardIndex].gradient}
-                        scale={cards[currentCardIndex].scale}
-                        rotate={cards[currentCardIndex].rotate}
-                        font={cards[currentCardIndex].font}
-                        name={cards[currentCardIndex].name}
-                        cardNumber={cards[currentCardIndex].cardNumber}
-                        expiryDate={cards[currentCardIndex].expiryDate}
-                        isPrivacyMode={isPrivacyMode}
-                        balance={cards[currentCardIndex].balance}
-                      />
-                    </motion.div>
+                    {currentCard ? (
+                      <motion.div
+                        key={currentCardIndex}
+                        initial={{ opacity: 0, x: 60, scale: 0.95 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -60, scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        className="w-full flex justify-center"
+                      >
+                        <VirtualCard
+                          gradient={currentCard.gradient}
+                          scale={currentCard.scale}
+                          rotate={currentCard.rotate}
+                          font={currentCard.font}
+                          name={currentCard.name}
+                          cardNumber={currentCard.cardNumber}
+                          expiryDate={currentCard.expiryDate}
+                          isPrivacyMode={isPrivacyMode}
+                          balance={currentCard.balance}
+                        />
+                      </motion.div>
+                    ) : (
+                      <motion.div key="no-card" className="flex flex-col items-center justify-center py-8 text-white/40 gap-2">
+                        <CreditCard className="w-10 h-10 opacity-30" />
+                        <p className="text-sm">No cards yet — add one above</p>
+                      </motion.div>
+                    )}
                   </AnimatePresence>
                   
                   {/* Pagination Dots */}
@@ -558,112 +553,111 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-6">
-                  <div>
+                  {!currentCard && (
+                    <p className="text-white/40 text-sm text-center py-4">Add a card to customize it.</p>
+                  )}
+                  {currentCard && <div>
                     <label className="text-[10px] uppercase tracking-widest text-white/40 mb-3 block">Card Name</label>
-                    <input 
+                    <input
                       type="text"
-                      value={cards[currentCardIndex].name || ''}
+                      value={currentCard.name || ''}
                       onChange={(e) => updateCurrentCard({ name: e.target.value })}
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-mint transition-all"
                       placeholder="Enter card name..."
                     />
-                  </div>
-
-                  <div>
+                  </div>}
+                  {currentCard && <div>
                     <label className="text-[10px] uppercase tracking-widest text-white/40 mb-3 block">Background</label>
                     <div className="grid grid-cols-4 gap-2">
                       {CARD_GRADIENTS.map((grad, i) => (
-                        <button 
+                        <button
                           key={i}
                           onClick={() => updateCurrentCard({ gradient: grad })}
                           className={cn(
                             "w-full aspect-square rounded-lg border-2 transition-all",
-                            cards[currentCardIndex].gradient === grad ? "border-mint scale-110" : "border-transparent opacity-50 hover:opacity-100"
+                            currentCard.gradient === grad ? "border-mint scale-110" : "border-transparent opacity-50 hover:opacity-100"
                           )}
                           style={{ background: grad }}
                         />
                       ))}
                     </div>
-                  </div>
-
-                  <div>
+                  </div>}
+                  {currentCard && <div>
                     <div className="flex justify-between mb-2">
                       <label className="text-[10px] uppercase tracking-widest text-white/40">Scale</label>
-                      <span className="text-[10px] text-mint font-mono">{(cards[currentCardIndex].scale ?? 1).toFixed(2)}x</span>
+                      <span className="text-[10px] text-mint font-mono">{(currentCard.scale ?? 1).toFixed(2)}x</span>
                     </div>
-                    <input 
-                      type="range" 
-                      min="0.5" 
-                      max="1.5" 
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="1.5"
                       step="0.01"
-                      value={cards[currentCardIndex].scale ?? 1}
+                      value={currentCard.scale ?? 1}
                       onChange={(e) => updateCurrentCard({ scale: parseFloat(e.target.value) })}
                       className="w-full accent-mint"
                     />
-                  </div>
-
-                  <div>
+                  </div>}
+                  {currentCard && <div>
                     <div className="flex justify-between mb-2">
                       <label className="text-[10px] uppercase tracking-widest text-white/40">Rotation</label>
-                      <span className="text-[10px] text-mint font-mono">{cards[currentCardIndex].rotate ?? 0}°</span>
+                      <span className="text-[10px] text-mint font-mono">{currentCard.rotate ?? 0}°</span>
                     </div>
-                    <input 
-                      type="range" 
-                      min="-45" 
-                      max="45" 
+                    <input
+                      type="range"
+                      min="-45"
+                      max="45"
                       step="1"
-                      value={cards[currentCardIndex].rotate ?? 0}
+                      value={currentCard.rotate ?? 0}
                       onChange={(e) => updateCurrentCard({ rotate: parseInt(e.target.value) })}
                       className="w-full accent-mint"
                     />
-                  </div>
-
-                  <div>
+                  </div>}
+                  {currentCard && <div>
                     <label className="text-[10px] uppercase tracking-widest text-white/40 mb-3 block">Card Details</label>
                     <div className="space-y-3">
-                      <input 
+                      <input
                         type="text"
-                        value={cards[currentCardIndex].cardNumber || ''}
+                        value={currentCard.cardNumber || ''}
                         onChange={(e) => updateCurrentCard({ cardNumber: e.target.value })}
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-mint transition-all"
                         placeholder="Card Number (e.g. 4582 •••• •••• 9012)"
                       />
                       <div className="grid grid-cols-2 gap-3">
-                        <input 
+                        <input
                           type="text"
-                          value={cards[currentCardIndex].expiryDate || ''}
+                          value={currentCard.expiryDate || ''}
                           onChange={(e) => updateCurrentCard({ expiryDate: e.target.value })}
                           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-mint transition-all"
                           placeholder="Expiry (MM/YY)"
                         />
-                        <input 
+                        <input
                           type="number"
-                          value={cards[currentCardIndex].balance ?? 0}
+                          value={currentCard.balance ?? 0}
                           onChange={(e) => updateCurrentCard({ balance: parseFloat(e.target.value) || 0 })}
                           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-mint transition-all"
                           placeholder="Balance"
                         />
                       </div>
                     </div>
-                  </div>
-
-                  <div>
+                  </div>}
+                  {currentCard && <div>
                     <label className="text-[10px] uppercase tracking-widest text-white/40 mb-3 block">Typography</label>
                     <div className="grid grid-cols-2 gap-2">
                       {['font-sans', 'font-serif', 'font-mono'].map((f) => (
-                        <button 
+                        <button
                           key={f}
                           onClick={() => updateCurrentCard({ font: f })}
                           className={cn(
                             "py-2 px-3 rounded-xl text-[10px] uppercase tracking-widest border transition-all",
-                            cards[currentCardIndex].font === f ? "bg-mint/20 border-mint text-mint" : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                            currentCard.font === f ? "bg-mint/20 border-mint text-mint" : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
                           )}
                         >
                           {f.split('-')[1]}
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </div>}
+
                 </div>
               </div>
             </div>
@@ -679,28 +673,7 @@ export default function App() {
                   </div>
                   <button className="text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors">Manage</button>
                 </div>
-                <div className="space-y-6">
-                  {[
-                    { name: 'New MacBook Pro', current: 1800, target: 2500, color: '#2dd4bf' },
-                    { name: 'Summer Vacation', current: 3200, target: 5000, color: '#8b5cf6' }
-                  ].map((goal) => (
-                    <div key={goal.name} className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/70">{goal.name}</span>
-                        <span className="font-mono text-xs">${goal.current} / ${goal.target}</span>
-                      </div>
-                      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(goal.current / goal.target) * 100}%` }}
-                          transition={{ duration: 1, delay: 0.5 }}
-                          className="h-full rounded-full"
-                          style={{ backgroundColor: goal.color }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <div className="text-white/40 text-sm text-center py-4">No savings goals yet.</div>
               </div>
 
               {/* Quick Insights */}
@@ -1166,7 +1139,8 @@ export default function App() {
                           title: 'Reset All Data',
                           message: 'Are you sure you want to clear all data? This action cannot be undone.',
                           onConfirm: () => {
-                            setTransactions(INITIAL_TRANSACTIONS);
+                            setTransactions([]);
+                            setCards([]);
                             localStorage.clear();
                             setToast({ message: 'All data has been reset.', type: 'success' });
                           }
@@ -1186,9 +1160,29 @@ export default function App() {
                 </div>
 
                 <div className="pt-8 border-t border-white/10">
+                  <h4 className="text-sm font-medium mb-2">Smart Import</h4>
+                  <p className="text-xs text-white/40 mb-4">Paste any bank statement text and Gemini AI will extract your transactions automatically.</p>
+                  <button
+                    onClick={() => setIsSmartImportOpen(true)}
+                    className="w-full glass-panel p-4 flex items-center justify-between hover:bg-white/5 transition-all group mb-8"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-mint/20 flex items-center justify-center text-mint">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-medium">AI Statement Parser</p>
+                        <p className="text-[10px] text-white/30">Paste text from any bank</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-white/20" />
+                  </button>
+                </div>
+
+                <div className="pt-8 border-t border-white/10">
                   <h4 className="text-sm font-medium mb-4">CSV Importer</h4>
                   <p className="text-xs text-white/40 mb-6">Import transactions from a CSV file. Use our template for the correct format.</p>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <button 
                       onClick={downloadTemplate}
@@ -1313,6 +1307,23 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Smart Import Modal */}
+      <AnimatePresence>
+        {isSmartImportOpen && (
+          <SmartImportModal
+            onClose={() => setIsSmartImportOpen(false)}
+            onImport={(imported) => {
+              setTransactions([...imported, ...transactions]);
+              const newCats = Array.from(new Set([...categories, ...imported.map(t => t.category)]));
+              setCategories(newCats);
+              setIsSmartImportOpen(false);
+              setToast({ message: `Imported ${imported.length} transactions via AI!`, type: 'success' });
+            }}
+            categories={categories}
+          />
         )}
       </AnimatePresence>
 
@@ -1624,5 +1635,266 @@ function AddTransactionForm({ onSubmit, categories }: { onSubmit: (t: Omit<Trans
         Save Entry
       </button>
     </form>
+  );
+}
+
+async function extractTextFromPDF(file: File): Promise<string> {
+  const pdfjsLib = await import('pdfjs-dist');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.mjs',
+    import.meta.url
+  ).toString();
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  const pageTexts = await Promise.all(
+    Array.from({ length: pdf.numPages }, async (_, i) => {
+      const page = await pdf.getPage(i + 1);
+      const content = await page.getTextContent();
+      return content.items.map((item: any) => item.str).join(' ');
+    })
+  );
+
+  return pageTexts.join('\n');
+}
+
+function SmartImportModal({ onClose, onImport, categories }: {
+  onClose: () => void;
+  onImport: (transactions: Omit<Transaction, 'id'>[]) => void;
+  categories: string[];
+}) {
+  const [text, setText] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'review' | 'error'>('idle');
+  const [loadingMsg, setLoadingMsg] = useState('Gemini is reading your statement…');
+  const [parsed, setParsed] = useState<Omit<Transaction, 'id'>[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const runGemini = async (statementText: string) => {
+    setStatus('loading');
+    setErrorMsg('');
+
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const prompt = `You are a financial data extractor. Parse the following bank statement text and extract all transactions.
+
+Return ONLY a valid JSON array (no markdown, no explanation) where each item has:
+- date: string in YYYY-MM-DD format
+- description: string (merchant or description)
+- amount: number (always positive)
+- type: "income" or "expense"
+- category: one of [${categories.join(', ')}] or a new appropriate category
+
+Bank statement text:
+${statementText}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: { thinkingConfig: { thinkingBudget: 0 } },
+    });
+
+    const raw = response.text?.trim() ?? '';
+    const jsonStr = raw.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+    const transactions = JSON.parse(jsonStr) as Omit<Transaction, 'id'>[];
+
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      throw new Error('No transactions found. Try a different statement.');
+    }
+
+    setParsed(transactions);
+    setSelected(new Set(transactions.map((_, i) => i)));
+    setStatus('review');
+  };
+
+  const handleParse = async () => {
+    if (!text.trim()) return;
+    try {
+      setLoadingMsg('Gemini is reading your statement…');
+      await runGemini(text);
+    } catch (e: any) {
+      setErrorMsg(e.message ?? 'Failed to parse. Check your API key.');
+      setStatus('error');
+    }
+  };
+
+  const handlePDFUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setLoadingMsg('Extracting text from PDF…');
+      setStatus('loading');
+      const extracted = await extractTextFromPDF(file);
+      setLoadingMsg('Gemini is reading your statement…');
+      await runGemini(extracted);
+    } catch (e: any) {
+      setErrorMsg(e.message ?? 'Failed to read PDF.');
+      setStatus('error');
+    }
+  };
+
+  const toggleAll = () => {
+    if (selected.size === parsed.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(parsed.map((_, i) => i)));
+    }
+  };
+
+  const handleImport = () => {
+    const toImport = parsed.filter((_, i) => selected.has(i)).map(t => ({
+      ...t,
+      id: Math.random().toString(36).substr(2, 9),
+    }));
+    onImport(toImport as any);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="glass-panel p-8 w-full max-w-2xl relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10 max-h-[85vh] flex flex-col"
+      >
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-mint/20 flex items-center justify-center text-mint">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xl font-light">AI Statement Parser</h3>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest">Powered by Gemini</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Idle / Error — paste input */}
+        {(status === 'idle' || status === 'error') && (
+          <div className="flex flex-col gap-4 flex-1">
+            {/* PDF Upload */}
+            <label className="flex items-center gap-3 p-4 rounded-2xl border border-dashed border-white/10 hover:border-mint/30 hover:bg-mint/5 transition-all cursor-pointer group">
+              <div className="w-9 h-9 rounded-xl bg-white/5 group-hover:bg-mint/10 flex items-center justify-center text-white/40 group-hover:text-mint transition-all shrink-0">
+                <Upload className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white/70 group-hover:text-white transition-colors">Upload PDF Statement</p>
+                <p className="text-[10px] text-white/30">Click to select a .pdf file from your bank</p>
+              </div>
+              <input type="file" accept=".pdf" onChange={handlePDFUpload} className="hidden" />
+            </label>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-[10px] text-white/30 uppercase tracking-widest">or paste text</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder={`Paste your bank statement here...\n\nExample:\nMar 01  WHOLEFDS #123       -52.40\nMar 03  PAYROLL DEPOSIT    +3200.00\nMar 05  NETFLIX.COM          -15.99`}
+              className="flex-1 min-h-[180px] w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-mint/40 transition-all resize-none font-mono"
+            />
+            {status === 'error' && (
+              <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-2">{errorMsg}</p>
+            )}
+            <button
+              onClick={handleParse}
+              disabled={!text.trim()}
+              className="w-full py-3 rounded-xl bg-mint/15 border border-mint/20 text-mint font-medium text-sm hover:bg-mint/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              Parse with Gemini
+            </button>
+          </div>
+        )}
+
+        {/* Loading */}
+        {status === 'loading' && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 py-16">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+              className="w-10 h-10 rounded-full border-2 border-mint/20 border-t-mint"
+            />
+            <p className="text-sm text-white/50">{loadingMsg}</p>
+          </div>
+        )}
+
+        {/* Review */}
+        {status === 'review' && (
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
+            <div className="flex justify-between items-center">
+              <p className="text-xs text-white/50">{selected.size} of {parsed.length} transactions selected</p>
+              <button onClick={toggleAll} className="text-xs text-mint hover:text-mint/70 transition-colors">
+                {selected.size === parsed.length ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+              {parsed.map((t, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelected(prev => {
+                    const next = new Set(prev);
+                    next.has(i) ? next.delete(i) : next.add(i);
+                    return next;
+                  })}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+                    selected.has(i)
+                      ? "bg-mint/5 border-mint/20"
+                      : "bg-white/[0.02] border-white/5 opacity-50"
+                  )}
+                >
+                  {selected.has(i)
+                    ? <CheckCircle2 className="w-4 h-4 text-mint shrink-0" />
+                    : <Circle className="w-4 h-4 text-white/20 shrink-0" />
+                  }
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{t.description}</p>
+                    <p className="text-[10px] text-white/40">{t.date} · {t.category}</p>
+                  </div>
+                  <span className={cn(
+                    "text-sm font-mono shrink-0",
+                    t.type === 'income' ? 'text-emerald-400' : 'text-white'
+                  )}>
+                    {t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-2 border-t border-white/10">
+              <button
+                onClick={() => { setStatus('idle'); setParsed([]); }}
+                className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/40 text-sm hover:text-white hover:border-white/20 transition-all"
+              >
+                Re-paste
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={selected.size === 0}
+                className="flex-1 py-2.5 rounded-xl bg-mint/15 border border-mint/20 text-mint text-sm font-medium hover:bg-mint/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Import {selected.size} Transactions
+              </button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </div>
   );
 }
