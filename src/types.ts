@@ -19,6 +19,14 @@ export interface Transaction {
   type: 'income' | 'expense';
 }
 
+export interface Goal {
+  id: string;
+  name: string;
+  target: number;
+  current: number;
+  color: string;
+}
+
 export const DEFAULT_CATEGORIES = [
   'Food', 'Transport', 'Entertainment', 'Shopping', 'Health', 'Bills', 'Salary', 'Investment', 'Other'
 ];

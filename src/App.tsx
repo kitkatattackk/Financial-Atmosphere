@@ -54,8 +54,8 @@ import {
   BarChart,
   Bar
 } from 'recharts';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfYear, endOfYear, isAfter, isBefore, isSameDay } from 'date-fns';
-import { Transaction, DEFAULT_CATEGORIES, Card } from './types';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfYear, endOfYear, isAfter, isBefore, isSameDay, subMonths, differenceInDays } from 'date-fns';
+import { Transaction, DEFAULT_CATEGORIES, Card, Goal } from './types';
 import { cn } from './utils';
 
 const INITIAL_CARDS: Card[] = [];
@@ -109,9 +109,18 @@ export default function App() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [minAmount, setMinAmount] = useState<string>('');
+  const [maxAmount, setMaxAmount] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [isSmartImportOpen, setIsSmartImportOpen] = useState(false);
+  const [goals, setGoals] = useState<Goal[]>(() => {
+    const saved = localStorage.getItem('goals');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('accentColor') || '#2dd4bf');
 
   const currentCard = cards[currentCardIndex];
 
@@ -144,6 +153,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('categories', JSON.stringify(categories));
   }, [categories]);
+
+  useEffect(() => {
+    localStorage.setItem('goals', JSON.stringify(goals));
+  }, [goals]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--color-mint', accentColor);
+    localStorage.setItem('accentColor', accentColor);
+  }, [accentColor]);
 
   const handleAddCard = () => {
     const newCard: Card = {
@@ -198,8 +216,83 @@ export default function App() {
       .forEach(t => {
         data[t.category] = (data[t.category] || 0) + t.amount;
       });
-    return Object.entries(data).map(([name, value]) => ({ name, value }));
+    return Object.entries(data).map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }));
   }, [transactions, reportPeriod]);
+
+  const insights = useMemo(() => {
+    if (transactions.length === 0) return [] as { text: React.ReactNode; color: string }[];
+
+    // Use the most recent month that has data, not necessarily today
+    const latestDate = transactions.reduce((max, t) =>
+      parseISO(t.date) > max ? parseISO(t.date) : max, parseISO(transactions[0].date));
+    const thisMonthStart = startOfMonth(latestDate);
+    const thisMonthEnd = endOfMonth(latestDate);
+    const lastMonthStart = startOfMonth(subMonths(latestDate, 1));
+    const lastMonthEnd = endOfMonth(subMonths(latestDate, 1));
+
+    const inRange = (t: Transaction, start: Date, end: Date) =>
+      isWithinInterval(parseISO(t.date), { start, end });
+
+    const thisMonthExpenses = transactions.filter(t => t.type === 'expense' && inRange(t, thisMonthStart, thisMonthEnd));
+    const lastMonthExpenses = transactions.filter(t => t.type === 'expense' && inRange(t, lastMonthStart, lastMonthEnd));
+    const thisMonthIncome = transactions.filter(t => t.type === 'income' && inRange(t, thisMonthStart, thisMonthEnd));
+
+    const thisTotal = thisMonthExpenses.reduce((s, t) => s + t.amount, 0);
+    const lastTotal = lastMonthExpenses.reduce((s, t) => s + t.amount, 0);
+    const thisIncome = thisMonthIncome.reduce((s, t) => s + t.amount, 0);
+
+    const result: { text: React.ReactNode; color: string }[] = [];
+
+    // 1. Top spending category this month
+    const catMap: Record<string, number> = {};
+    thisMonthExpenses.forEach(t => { catMap[t.category] = (catMap[t.category] || 0) + t.amount; });
+    const topCat = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
+    if (topCat) {
+      result.push({
+        color: '#f59e0b',
+        text: <>Your top spend this month is <span className="text-white font-medium">{topCat[0]}</span> at <span className="text-orange-400 font-bold">${topCat[1].toFixed(2)}</span>.</>
+      });
+    }
+
+    // 2. Month-over-month change
+    if (lastTotal > 0 && thisTotal > 0) {
+      const pct = ((thisTotal - lastTotal) / lastTotal) * 100;
+      const up = pct > 0;
+      result.push({
+        color: up ? '#f43f5e' : '#10b981',
+        text: <>Spending is <span className={`font-bold ${up ? 'text-red-400' : 'text-emerald-400'}`}>{up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}%</span> {up ? 'higher' : 'lower'} than last month.</>
+      });
+    }
+
+    // 3. Savings rate this month
+    if (thisIncome > 0) {
+      const rate = Math.max(0, ((thisIncome - thisTotal) / thisIncome) * 100);
+      result.push({
+        color: '#2dd4bf',
+        text: <>Your <span className="text-mint font-bold">savings rate</span> this month is <span className="text-white font-medium">{rate.toFixed(0)}%</span> of income.</>
+      });
+    }
+
+    // 4. Biggest single expense this month
+    const biggest = thisMonthExpenses.sort((a, b) => b.amount - a.amount)[0];
+    if (biggest) {
+      result.push({
+        color: '#8b5cf6',
+        text: <>Largest expense: <span className="text-white font-medium">{biggest.description}</span> — <span className="text-purple-400 font-bold">${biggest.amount.toFixed(2)}</span>.</>
+      });
+    }
+
+    // 5. Daily average spend
+    const daysElapsed = Math.max(1, differenceInDays(latestDate, thisMonthStart) + 1);
+    if (thisTotal > 0) {
+      result.push({
+        color: '#06b6d4',
+        text: <>You're spending an average of <span className="text-cyan-400 font-bold">${(thisTotal / daysElapsed).toFixed(2)}/day</span> this month.</>
+      });
+    }
+
+    return result.slice(0, 3);
+  }, [transactions]);
 
   const sortedTransactions = useMemo(() => {
     return [...transactions]
@@ -228,7 +321,12 @@ export default function App() {
           matchesDate = isBefore(tDate, end) || isSameDay(tDate, end);
         }
 
-        return matchesSearch && matchesType && matchesDate;
+        const matchesCategory = filterCategory === 'all' || t.category === filterCategory;
+        const matchesAmount =
+          (!minAmount || t.amount >= parseFloat(minAmount)) &&
+          (!maxAmount || t.amount <= parseFloat(maxAmount));
+
+        return matchesSearch && matchesType && matchesDate && matchesCategory && matchesAmount;
       })
       .sort((a, b) => {
         let comparison = 0;
@@ -241,7 +339,7 @@ export default function App() {
         }
         return sortDirection === 'asc' ? comparison : -comparison;
       });
-  }, [transactions, searchTerm, filterType, sortField, sortDirection, startDate, endDate]);
+  }, [transactions, searchTerm, filterType, sortField, sortDirection, startDate, endDate, filterCategory, minAmount, maxAmount]);
 
   const addTransaction = (t: Omit<Transaction, 'id'>) => {
     const newTransaction = { ...t, id: Math.random().toString(36).substr(2, 9) };
@@ -257,6 +355,69 @@ export default function App() {
 
   const deleteTransaction = (id: string) => {
     setTransactions(transactions.filter(t => t.id !== id));
+  };
+
+  const exportPDF = () => {
+    const now = new Date();
+    const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const balance = totalIncome - totalExpenses;
+
+    const catTotals: Record<string, number> = {};
+    transactions.filter(t => t.type === 'expense').forEach(t => {
+      catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
+    });
+    const catRows = Object.entries(catTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, amt]) => `<tr><td>${cat}</td><td>$${amt.toFixed(2)}</td><td>${((amt / totalExpenses) * 100).toFixed(1)}%</td></tr>`)
+      .join('');
+
+    const txRows = [...transactions]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map(t => `<tr>
+        <td>${t.date}</td>
+        <td>${t.description}</td>
+        <td>${t.category}</td>
+        <td style="color:${t.type === 'income' ? '#10b981' : '#f43f5e'}">${t.type === 'income' ? '+' : '-'}$${t.amount.toFixed(2)}</td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Financial Report — ${format(now, 'MMMM yyyy')}</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1e293b; padding: 40px; font-size: 13px; }
+      h1 { font-size: 28px; font-weight: 300; color: #0f172a; margin-bottom: 4px; }
+      .subtitle { color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 32px; }
+      .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+      .card { padding: 20px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; }
+      .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 8px; }
+      .card-value { font-size: 24px; font-weight: 300; }
+      .income { color: #10b981; } .expense { color: #f43f5e; } .balance { color: ${accentColor}; }
+      h2 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin: 24px 0 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; border-bottom: 2px solid #e2e8f0; }
+      td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+      tr:last-child td { border-bottom: none; }
+      @media print { body { padding: 20px; } }
+    </style></head><body>
+    <h1>Financial Report</h1>
+    <p class="subtitle">Generated ${format(now, 'MMMM d, yyyy')}</p>
+    <div class="summary">
+      <div class="card"><div class="card-label">Total Income</div><div class="card-value income">$${totalIncome.toFixed(2)}</div></div>
+      <div class="card"><div class="card-label">Total Expenses</div><div class="card-value expense">$${totalExpenses.toFixed(2)}</div></div>
+      <div class="card"><div class="card-label">Net Balance</div><div class="card-value balance">$${balance.toFixed(2)}</div></div>
+    </div>
+    <h2>Spending by Category</h2>
+    <table><thead><tr><th>Category</th><th>Amount</th><th>% of Expenses</th></tr></thead><tbody>${catRows}</tbody></table>
+    <h2>All Transactions (${transactions.length})</h2>
+    <table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead><tbody>${txRows}</tbody></table>
+    </body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => { w.print(); };
   };
 
   const exportCSV = () => {
@@ -671,9 +832,50 @@ export default function App() {
                     <Target className="w-5 h-5" />
                     <h3 className="text-xl font-light">Savings Goals</h3>
                   </div>
-                  <button className="text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors">Manage</button>
+                  <button
+                    onClick={() => setIsGoalsModalOpen(true)}
+                    className="text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors"
+                  >
+                    Manage
+                  </button>
                 </div>
-                <div className="text-white/40 text-sm text-center py-4">No savings goals yet.</div>
+                {goals.length === 0 ? (
+                  <div className="flex flex-col items-center gap-3 py-4">
+                    <p className="text-white/40 text-sm text-center">No savings goals yet.</p>
+                    <button
+                      onClick={() => setIsGoalsModalOpen(true)}
+                      className="text-[10px] uppercase tracking-widest text-mint/70 hover:text-mint transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Add goal
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {goals.map((goal) => {
+                      const pct = Math.min((goal.current / goal.target) * 100, 100);
+                      return (
+                        <div key={goal.id} className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-white/70">{goal.name}</span>
+                            <span className="font-mono text-xs text-white/60">
+                              ${goal.current.toLocaleString()} / ${goal.target.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: 0.8, ease: 'easeOut' }}
+                              className="h-full rounded-full"
+                              style={{ backgroundColor: goal.color }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-white/30 text-right">{pct.toFixed(0)}% complete</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Quick Insights */}
@@ -684,18 +886,24 @@ export default function App() {
                     <h3 className="text-xl font-light">Quick Insights</h3>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-                    <p className="text-xs text-white/60 leading-relaxed">
-                      You've spent <span className="text-orange-400 font-bold">15% less</span> on <span className="text-white font-medium">Food</span> this week compared to your average.
-                    </p>
+                {insights.length === 0 ? (
+                  <p className="text-white/40 text-sm text-center py-4">Import transactions to see insights.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {insights.map((insight, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                        className="p-4 rounded-2xl bg-white/5 border border-white/10"
+                        style={{ borderLeftColor: insight.color, borderLeftWidth: 2 }}
+                      >
+                        <p className="text-xs text-white/60 leading-relaxed">{insight.text}</p>
+                      </motion.div>
+                    ))}
                   </div>
-                  <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-                    <p className="text-xs text-white/60 leading-relaxed">
-                      Your <span className="text-mint font-bold">Savings Rate</span> is currently at <span className="text-white font-medium">24%</span>. You're on track for your vacation goal!
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Category Breakdown */}
@@ -738,7 +946,7 @@ export default function App() {
                     <div key={cat.name} className="flex items-center gap-2 text-[10px]">
                       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                       <span className="text-white/60 truncate">{cat.name}</span>
-                      <span className="text-white font-medium ml-auto">${cat.value}</span>
+                      <span className="text-white font-medium ml-auto">${cat.value.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -823,56 +1031,48 @@ export default function App() {
             exit={{ opacity: 0, x: -20 }}
             className="glass-panel p-8"
           >
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-              <h3 className="text-2xl font-light">Transaction History</h3>
-              <div className="flex flex-wrap gap-4 w-full md:w-auto items-center">
-                <div className="relative flex-1 md:w-48">
-                  <input 
+            <div className="mb-8 space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h3 className="text-2xl font-light">Transaction History</h3>
+                <button
+                  onClick={() => { setSearchTerm(''); setFilterType('all'); setFilterCategory('all'); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); }}
+                  className="text-[10px] uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors"
+                >
+                  Clear all filters
+                </button>
+              </div>
+
+              {/* Filter Row */}
+              <div className="flex flex-wrap gap-3 items-center">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[160px]">
+                  <input
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Search transactions..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full glass-panel bg-white/5 px-4 py-2 text-sm outline-none focus:border-mint/50 transition-all"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-mint/50 transition-all"
                   />
                 </div>
-                
-                <div className="flex items-center gap-2 glass-panel p-1 bg-white/5">
-                  <div className="flex items-center gap-1 px-2">
-                    <Calendar className="w-3 h-3 text-white/40" />
-                    <input 
-                      type="date" 
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark]"
-                    />
-                  </div>
-                  <span className="text-white/20">-</span>
-                  <div className="flex items-center gap-1 px-2">
-                    <input 
-                      type="date" 
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark]"
-                    />
-                  </div>
-                  {(startDate || endDate) && (
-                    <button 
-                      onClick={() => { setStartDate(''); setEndDate(''); }}
-                      className="p-1 hover:bg-white/10 rounded-full transition-colors"
-                      title="Clear dates"
-                    >
-                      <X className="w-3 h-3 text-white/40" />
-                    </button>
-                  )}
-                </div>
 
-                <div className="flex glass-panel p-1 bg-white/5">
+                {/* Category */}
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white/70 outline-none focus:border-mint/50 transition-all [color-scheme:dark] cursor-pointer"
+                >
+                  <option value="all">All categories</option>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                {/* Type toggle */}
+                <div className="flex bg-white/5 border border-white/10 rounded-xl p-1">
                   {(['all', 'income', 'expense'] as const).map((type) => (
                     <button
                       key={type}
                       onClick={() => setFilterType(type)}
                       className={cn(
-                        "px-4 py-1 rounded-xl text-xs uppercase tracking-widest transition-all",
+                        "px-3 py-1 rounded-lg text-xs uppercase tracking-widest transition-all",
                         filterType === type ? "bg-white/20 text-white font-medium" : "text-white/40 hover:text-white"
                       )}
                     >
@@ -880,7 +1080,87 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+
+                {/* Date range */}
+                <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                  <Calendar className="w-3 h-3 text-white/40 shrink-0" />
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark] w-[120px]"
+                  />
+                  <span className="text-white/20 text-xs">–</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark] w-[120px]"
+                  />
+                  {(startDate || endDate) && (
+                    <button onClick={() => { setStartDate(''); setEndDate(''); }} className="ml-1 text-white/30 hover:text-white/60 transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Amount range */}
+                <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                  <span className="text-white/40 text-xs">$</span>
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                    className="bg-transparent text-xs text-white/70 outline-none w-16 placeholder-white/20"
+                  />
+                  <span className="text-white/20 text-xs">–</span>
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={maxAmount}
+                    onChange={(e) => setMaxAmount(e.target.value)}
+                    className="bg-transparent text-xs text-white/70 outline-none w-16 placeholder-white/20"
+                  />
+                  {(minAmount || maxAmount) && (
+                    <button onClick={() => { setMinAmount(''); setMaxAmount(''); }} className="ml-1 text-white/30 hover:text-white/60 transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Active filter pills */}
+              {(searchTerm || filterType !== 'all' || filterCategory !== 'all' || startDate || endDate || minAmount || maxAmount) && (
+                <div className="flex flex-wrap gap-2">
+                  {searchTerm && (
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-mint/10 border border-mint/20 text-mint text-xs">
+                      "{searchTerm}" <button onClick={() => setSearchTerm('')}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {filterType !== 'all' && (
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-mint/10 border border-mint/20 text-mint text-xs">
+                      {filterType} <button onClick={() => setFilterType('all')}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {filterCategory !== 'all' && (
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-mint/10 border border-mint/20 text-mint text-xs">
+                      {filterCategory} <button onClick={() => setFilterCategory('all')}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {(startDate || endDate) && (
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-mint/10 border border-mint/20 text-mint text-xs">
+                      {startDate || '…'} – {endDate || '…'} <button onClick={() => { setStartDate(''); setEndDate(''); }}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {(minAmount || maxAmount) && (
+                    <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-mint/10 border border-mint/20 text-mint text-xs">
+                      ${minAmount || '0'} – ${maxAmount || '∞'} <button onClick={() => { setMinAmount(''); setMaxAmount(''); }}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  <span className="text-white/30 text-xs self-center">{sortedTransactions.length} result{sortedTransactions.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -1034,10 +1314,10 @@ export default function App() {
                   </ResponsiveContainer>
                 </div>
 
-                <div className="h-[400px]">
-                  <h4 className="text-sm uppercase tracking-widest text-white/70 mb-8 text-center">Spending by Volume</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={categoryData} layout="vertical">
+                <div>
+                  <h4 className="text-sm uppercase tracking-widest text-white/70 mb-4 text-center">Spending by Volume</h4>
+                  <ResponsiveContainer width="100%" height={Math.max(200, categoryData.length * 48)}>
+                    <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                       <XAxis type="number" hide />
                       <YAxis 
@@ -1098,6 +1378,37 @@ export default function App() {
               <h3 className="text-2xl font-light mb-8">Account Settings</h3>
               
               <div className="space-y-8">
+                {/* Accent Color */}
+                <div>
+                  <h4 className="text-sm font-medium mb-1">Accent Color</h4>
+                  <p className="text-xs text-white/40 mb-4">Choose your interface accent color</p>
+                  <div className="flex gap-3 flex-wrap">
+                    {[
+                      { name: 'Mint', color: '#2dd4bf' },
+                      { name: 'Violet', color: '#8b5cf6' },
+                      { name: 'Blue', color: '#3b82f6' },
+                      { name: 'Pink', color: '#ec4899' },
+                      { name: 'Amber', color: '#f59e0b' },
+                      { name: 'Rose', color: '#f43f5e' },
+                      { name: 'Emerald', color: '#10b981' },
+                      { name: 'Indigo', color: '#6366f1' },
+                    ].map(theme => (
+                      <button
+                        key={theme.color}
+                        onClick={() => setAccentColor(theme.color)}
+                        title={theme.name}
+                        className={cn(
+                          'w-8 h-8 rounded-full transition-all duration-200',
+                          accentColor === theme.color ? 'scale-125 ring-2 ring-white/50 ring-offset-2 ring-offset-transparent' : 'opacity-60 hover:opacity-100 hover:scale-110'
+                        )}
+                        style={{ backgroundColor: theme.color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-white/5" />
+
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium">Privacy Mode</h4>
@@ -1141,6 +1452,7 @@ export default function App() {
                           onConfirm: () => {
                             setTransactions([]);
                             setCards([]);
+                            setGoals([]);
                             localStorage.clear();
                             setToast({ message: 'All data has been reset.', type: 'success' });
                           }
@@ -1150,11 +1462,17 @@ export default function App() {
                     >
                       Reset Data
                     </button>
-                    <button 
+                    <button
                       onClick={exportCSV}
                       className="glass-button px-6 py-2 text-xs uppercase tracking-widest text-white/60 hover:text-white"
                     >
                       Export CSV
+                    </button>
+                    <button
+                      onClick={exportPDF}
+                      className="glass-button px-6 py-2 text-xs uppercase tracking-widest text-white/60 hover:text-white"
+                    >
+                      Export PDF
                     </button>
                   </div>
                 </div>
@@ -1307,6 +1625,17 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Goals Modal */}
+      <AnimatePresence>
+        {isGoalsModalOpen && (
+          <GoalsModal
+            goals={goals}
+            onClose={() => setIsGoalsModalOpen(false)}
+            onSave={setGoals}
+          />
         )}
       </AnimatePresence>
 
@@ -1657,6 +1986,175 @@ async function extractTextFromPDF(file: File): Promise<string> {
   );
 
   return pageTexts.join('\n');
+}
+
+const GOAL_COLORS = ['#2dd4bf', '#8b5cf6', '#f59e0b', '#ec4899', '#10b981', '#06b6d4', '#f43f5e', '#6366f1'];
+
+function GoalsModal({ goals, onClose, onSave }: {
+  goals: Goal[];
+  onClose: () => void;
+  onSave: (goals: Goal[]) => void;
+}) {
+  const [list, setList] = useState<Goal[]>(goals);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: '', target: '', current: '', color: GOAL_COLORS[0] });
+  const [isAdding, setIsAdding] = useState(false);
+
+  const startAdd = () => {
+    setIsAdding(true);
+    setEditingId(null);
+    setForm({ name: '', target: '', current: '', color: GOAL_COLORS[0] });
+  };
+
+  const startEdit = (goal: Goal) => {
+    setEditingId(goal.id);
+    setIsAdding(false);
+    setForm({ name: goal.name, target: String(goal.target), current: String(goal.current), color: goal.color });
+  };
+
+  const saveForm = () => {
+    if (!form.name.trim() || !form.target) return;
+    if (editingId) {
+      setList(prev => prev.map(g => g.id === editingId
+        ? { ...g, name: form.name, target: parseFloat(form.target), current: parseFloat(form.current) || 0, color: form.color }
+        : g
+      ));
+      setEditingId(null);
+    } else {
+      setList(prev => [...prev, {
+        id: Date.now().toString(),
+        name: form.name,
+        target: parseFloat(form.target),
+        current: parseFloat(form.current) || 0,
+        color: form.color,
+      }]);
+      setIsAdding(false);
+    }
+    setForm({ name: '', target: '', current: '', color: GOAL_COLORS[0] });
+  };
+
+  const deleteGoal = (id: string) => setList(prev => prev.filter(g => g.id !== id));
+
+  const cancel = () => { setIsAdding(false); setEditingId(null); };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className="glass-panel p-8 w-full max-w-md max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-light flex items-center gap-2 text-mint">
+            <Target className="w-5 h-5" /> Savings Goals
+          </h2>
+          <button onClick={onClose} className="text-white/40 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+          {list.length === 0 && !isAdding && (
+            <p className="text-white/40 text-sm text-center py-6">No goals yet. Add one below.</p>
+          )}
+          {list.map(goal => (
+            <div key={goal.id}>
+              {editingId === goal.id ? (
+                <GoalForm form={form} setForm={setForm} onSave={saveForm} onCancel={cancel} />
+              ) : (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 group">
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: goal.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{goal.name}</p>
+                    <p className="text-[10px] text-white/40 font-mono">
+                      ${goal.current.toLocaleString()} / ${goal.target.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => startEdit(goal)} className="text-white/40 hover:text-mint transition-colors text-[10px] uppercase tracking-widest">Edit</button>
+                    <button onClick={() => deleteGoal(goal.id)} className="text-white/40 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {isAdding && <GoalForm form={form} setForm={setForm} onSave={saveForm} onCancel={cancel} />}
+        </div>
+
+        {!isAdding && editingId === null && (
+          <button
+            onClick={startAdd}
+            className="w-full py-2.5 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-mint hover:border-mint/30 transition-all text-sm flex items-center justify-center gap-2 mb-4"
+          >
+            <Plus className="w-4 h-4" /> Add Goal
+          </button>
+        )}
+
+        <button
+          onClick={() => { onSave(list); onClose(); }}
+          className="w-full py-3 rounded-xl bg-mint text-slate-900 font-medium text-sm hover:bg-mint/90 transition-colors"
+        >
+          Save Goals
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function GoalForm({ form, setForm, onSave, onCancel }: {
+  form: { name: string; target: string; current: string; color: string };
+  setForm: React.Dispatch<React.SetStateAction<{ name: string; target: string; current: string; color: string }>>;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+      <input
+        autoFocus
+        type="text"
+        placeholder="Goal name (e.g. New MacBook)"
+        value={form.name}
+        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-mint transition-all"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="number"
+          placeholder="Target ($)"
+          value={form.target}
+          onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-mint transition-all"
+        />
+        <input
+          type="number"
+          placeholder="Saved so far ($)"
+          value={form.current}
+          onChange={e => setForm(f => ({ ...f, current: e.target.value }))}
+          className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-mint transition-all"
+        />
+      </div>
+      <div className="flex gap-2">
+        {GOAL_COLORS.map(c => (
+          <button
+            key={c}
+            onClick={() => setForm(f => ({ ...f, color: c }))}
+            className={cn('w-5 h-5 rounded-full transition-all', form.color === c ? 'scale-125 ring-2 ring-white/40' : 'opacity-60 hover:opacity-100')}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button onClick={onCancel} className="flex-1 py-2 rounded-xl border border-white/10 text-white/50 text-sm hover:text-white transition-colors">Cancel</button>
+        <button onClick={onSave} className="flex-1 py-2 rounded-xl bg-mint/20 text-mint text-sm hover:bg-mint/30 transition-colors">Save</button>
+      </div>
+    </div>
+  );
 }
 
 function SmartImportModal({ onClose, onImport, categories }: {
