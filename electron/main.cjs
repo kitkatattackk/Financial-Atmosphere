@@ -7,6 +7,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    title: 'Financial Atmosphere',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -19,7 +20,6 @@ function createWindow() {
 
   if (isDev) {
     win.loadURL('http://localhost:3000');
-    win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }

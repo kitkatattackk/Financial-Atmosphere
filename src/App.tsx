@@ -344,58 +344,45 @@ export default function App() {
           >
             Financial <span className="italic font-serif">Atmosphere</span>
           </motion.h1>
-          <p className="text-white/70 text-sm tracking-widest uppercase">Liquid Glass Expense Tracker</p>
+          <p className="text-white/70 text-sm tracking-widest uppercase">Clarity through every transaction</p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <nav className="glass-panel p-1 flex gap-1">
-            <button 
-              onClick={() => setActiveTab('dashboard')}
-              className={cn(
-                "px-4 py-2 rounded-2xl text-sm transition-all",
-                activeTab === 'dashboard' ? "bg-white/30 text-white font-medium" : "text-white/70 hover:text-white"
-              )}
-            >
-              <LayoutDashboard className="w-4 h-4 inline-block mr-2" />
-              Dashboard
-            </button>
-            <button 
-              onClick={() => setActiveTab('history')}
-              className={cn(
-                "px-4 py-2 rounded-2xl text-sm transition-all",
-                activeTab === 'history' ? "bg-white/30 text-white font-medium" : "text-white/70 hover:text-white"
-              )}
-            >
-              <History className="w-4 h-4 inline-block mr-2" />
-              History
-            </button>
-            <button 
-              onClick={() => setActiveTab('reports')}
-              className={cn(
-                "px-4 py-2 rounded-2xl text-sm transition-all",
-                activeTab === 'reports' ? "bg-white/30 text-white font-medium" : "text-white/70 hover:text-white"
-              )}
-            >
-              <PieChartIcon className="w-4 h-4 inline-block mr-2" />
-              Reports
-            </button>
-            <button 
-              onClick={() => setActiveTab('settings')}
-              className={cn(
-                "px-4 py-2 rounded-2xl text-sm transition-all",
-                activeTab === 'settings' ? "bg-white/30 text-white font-medium" : "text-white/70 hover:text-white"
-              )}
-            >
-              <Settings className="w-4 h-4 inline-block mr-2" />
-              Settings
-            </button>
+        <div className="flex items-center gap-3">
+          <nav className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl p-1 backdrop-blur-xl">
+            {([
+              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+              { id: 'history',   label: 'History',   icon: History },
+              { id: 'reports',   label: 'Reports',   icon: PieChartIcon },
+              { id: 'settings',  label: 'Settings',  icon: Settings },
+            ] as const).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={cn(
+                  "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300",
+                  activeTab === id
+                    ? "text-white"
+                    : "text-white/40 hover:text-white/70"
+                )}
+              >
+                {activeTab === id && (
+                  <motion.div
+                    layoutId="nav-pill"
+                    className="absolute inset-0 rounded-xl bg-white/10 border border-white/10"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <Icon className="w-4 h-4 relative z-10" />
+                <span className="relative z-10">{label}</span>
+              </button>
+            ))}
           </nav>
-          
-          <button 
+
+          <button
             onClick={() => setIsModalOpen(true)}
-            className="glass-button px-6 py-3 flex items-center gap-2 bg-orange-500/20 border-orange-500/30 hover:bg-orange-500/40 text-orange-200"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-mint/15 border border-mint/20 text-mint hover:bg-mint/25 hover:border-mint/30 transition-all duration-300 backdrop-blur-xl"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             Add Entry
           </button>
         </div>
@@ -440,17 +427,28 @@ export default function App() {
                 </div>
                 
                 <div className="flex flex-col items-center py-8 overflow-hidden">
-                  <VirtualCard 
-                    gradient={cards[currentCardIndex].gradient} 
-                    scale={cards[currentCardIndex].scale} 
-                    rotate={cards[currentCardIndex].rotate}
-                    font={cards[currentCardIndex].font}
-                    name={cards[currentCardIndex].name}
-                    cardNumber={cards[currentCardIndex].cardNumber}
-                    expiryDate={cards[currentCardIndex].expiryDate}
-                    isPrivacyMode={isPrivacyMode}
-                    balance={cards[currentCardIndex].balance}
-                  />
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentCardIndex}
+                      initial={{ opacity: 0, x: 60, scale: 0.95 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: -60, scale: 0.95 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                      className="w-full flex justify-center"
+                    >
+                      <VirtualCard
+                        gradient={cards[currentCardIndex].gradient}
+                        scale={cards[currentCardIndex].scale}
+                        rotate={cards[currentCardIndex].rotate}
+                        font={cards[currentCardIndex].font}
+                        name={cards[currentCardIndex].name}
+                        cardNumber={cards[currentCardIndex].cardNumber}
+                        expiryDate={cards[currentCardIndex].expiryDate}
+                        isPrivacyMode={isPrivacyMode}
+                        balance={cards[currentCardIndex].balance}
+                      />
+                    </motion.div>
+                  </AnimatePresence>
                   
                   {/* Pagination Dots */}
                   <div className="flex gap-2 mt-8">
@@ -1013,7 +1011,7 @@ export default function App() {
                     onClick={() => setReportPeriod('monthly')}
                     className={cn(
                       "px-4 py-2 rounded-2xl text-xs transition-all",
-                      reportPeriod === 'monthly' ? "bg-white/30 text-white font-medium" : "text-white/70 hover:text-white"
+                      reportPeriod === 'monthly' ? "bg-white/10 text-white font-medium shadow-inner" : "text-white/70 hover:text-white"
                     )}
                   >
                     Monthly
@@ -1022,7 +1020,7 @@ export default function App() {
                     onClick={() => setReportPeriod('yearly')}
                     className={cn(
                       "px-4 py-2 rounded-2xl text-xs transition-all",
-                      reportPeriod === 'yearly' ? "bg-white/30 text-white font-medium" : "text-white/70 hover:text-white"
+                      reportPeriod === 'yearly' ? "bg-white/10 text-white font-medium shadow-inner" : "text-white/70 hover:text-white"
                     )}
                   >
                     Yearly
@@ -1123,7 +1121,7 @@ export default function App() {
             exit={{ opacity: 0, y: -20 }}
             className="max-w-2xl mx-auto space-y-8"
           >
-            <div className="glass-panel p-8">
+            <div className="glass-panel p-8 bg-slate-900/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10">
               <h3 className="text-2xl font-light mb-8">Account Settings</h3>
               
               <div className="space-y-8">
@@ -1231,7 +1229,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="glass-panel p-8 bg-mint/5 border-mint/20">
+            <div className="glass-panel p-8 bg-slate-900/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-mint/20">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-mint/20 flex items-center justify-center text-mint">
                   <Lock className="w-6 h-6" />
