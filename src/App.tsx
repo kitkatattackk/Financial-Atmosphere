@@ -37,7 +37,9 @@ import {
   Zap,
   Sparkles,
   CheckCircle2,
-  Circle
+  Circle,
+  Sun,
+  Moon
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { 
@@ -121,6 +123,7 @@ export default function App() {
   });
   const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('accentColor') || '#2dd4bf');
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
 
   const currentCard = cards[currentCardIndex];
 
@@ -162,6 +165,11 @@ export default function App() {
     document.documentElement.style.setProperty('--color-mint', accentColor);
     localStorage.setItem('accentColor', accentColor);
   }, [accentColor]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   const handleAddCard = () => {
     const newCard: Card = {
@@ -526,6 +534,14 @@ export default function App() {
               </button>
             ))}
           </nav>
+
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="p-2.5 rounded-xl glass-button text-white/50 hover:text-white transition-all"
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
 
           <button
             onClick={() => setIsModalOpen(true)}
@@ -1405,6 +1421,28 @@ export default function App() {
                       />
                     ))}
                   </div>
+                </div>
+
+                <div className="border-t border-white/5" />
+
+                {/* Dark / Light Mode */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium">Appearance</h4>
+                    <p className="text-xs text-white/40">{isDarkMode ? 'Dark mode' : 'Light mode'}</p>
+                  </div>
+                  <button
+                    onClick={() => setIsDarkMode(!isDarkMode)}
+                    className={cn(
+                      "w-12 h-6 rounded-full relative p-1 transition-all",
+                      !isDarkMode ? "bg-mint/20" : "bg-white/10"
+                    )}
+                  >
+                    <motion.div
+                      animate={{ x: !isDarkMode ? 24 : 0 }}
+                      className={cn("w-4 h-4 rounded-full", !isDarkMode ? "bg-mint" : "bg-white/40")}
+                    />
+                  </button>
                 </div>
 
                 <div className="border-t border-white/5" />
