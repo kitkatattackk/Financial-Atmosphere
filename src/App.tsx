@@ -62,6 +62,11 @@ import { cn } from './utils';
 
 const IS_DEMO = import.meta.env.VITE_DEMO_MODE === 'true';
 
+async function hashPin(pin: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 const DEMO_CARDS: Card[] = [
   { id: '1', name: 'Chase Sapphire', gradient: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)', scale: 1, rotate: -3, font: 'font-mono', balance: 4820.50, cardNumber: '4532 •••• •••• 8821', expiryDate: '08/27' },
   { id: '2', name: 'Amex Gold', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', scale: 0.95, rotate: 2, font: 'font-sans', balance: 1240.00, cardNumber: '3782 •••• •••• 1005', expiryDate: '11/26' },
@@ -193,6 +198,14 @@ export default function App() {
   const [hasOnboarded, setHasOnboarded] = useState(() => IS_DEMO || localStorage.getItem('hasOnboarded') === 'true');
   const [historyView, setHistoryView] = useState<'list' | 'calendar'>('list');
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [pinHash, setPinHash] = useState<string | null>(() => localStorage.getItem('pinHash'));
+  const [isLocked, setIsLocked] = useState(() => !!localStorage.getItem('pinHash'));
+  const [isPinSetupOpen, setIsPinSetupOpen] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(() => {
+    const stored = localStorage.getItem('biometricEnabled');
+    if (stored === null) return !!localStorage.getItem('pinHash'); // default on when PIN exists
+    return stored === 'true';
+  });
 
   const currentCard = cards[currentCardIndex];
 
@@ -239,6 +252,37 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
     localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
+
+  // Lock on background — use Capacitor's resume listener on native, visibilitychange on web
+  useEffect(() => {
+    if (!pinHash) return;
+    let removeListener: (() => void) | null = null;
+
+    import('@aparajita/capacitor-biometric-auth').then(({ BiometricAuth }) => {
+      BiometricAuth.addResumeListener(() => {
+        if (localStorage.getItem('pinHash')) setIsLocked(true);
+      }).then(handle => {
+        removeListener = () => handle.remove();
+      }).catch(() => {});
+    }).catch(() => {});
+
+    // Web fallback
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden' && localStorage.getItem('pinHash')) {
+        setIsLocked(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      removeListener?.();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [pinHash]);
+
+  useEffect(() => {
+    localStorage.setItem('biometricEnabled', biometricEnabled.toString());
+  }, [biometricEnabled]);
 
   const handleAddCard = () => {
     const newCard: Card = {
@@ -1725,16 +1769,92 @@ export default function App() {
               </div>
             </div>
 
-            <div className="glass-panel p-8 bg-slate-900/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-mint/20">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-mint/20 flex items-center justify-center text-mint">
+            <div className="glass-panel p-5 md:p-8 bg-slate-900/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-mint/20">
+              <h3 className="text-xs uppercase tracking-widest text-white/40 mb-5">Security</h3>
+
+              <div className="flex items-center gap-4 mb-5">
+                <div className={cn(
+                  "w-12 h-12 rounded-full flex items-center justify-center",
+                  pinHash ? "bg-mint/20 text-mint" : "bg-white/10 text-white/40"
+                )}>
                   <Lock className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium">Security Upgrade</h4>
-                  <p className="text-xs text-white/60">Your account is currently protected by standard encryption.</p>
+                  <h4 className="text-sm font-medium">PIN Lock</h4>
+                  <p className="text-xs text-white/60">
+                    {pinHash ? 'App locks automatically when backgrounded.' : 'Add a 4-digit PIN to protect your data.'}
+                  </p>
+                </div>
+                <div className="ml-auto">
+                  <span className={cn(
+                    "text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full border font-medium",
+                    pinHash ? "text-mint border-mint/30 bg-mint/10" : "text-white/30 border-white/10 bg-white/5"
+                  )}>
+                    {pinHash ? 'Enabled' : 'Off'}
+                  </span>
                 </div>
               </div>
+
+              <div className="flex gap-3 mb-4">
+                <button
+                  onClick={() => setIsPinSetupOpen(true)}
+                  className="flex-1 glass-button py-3 text-xs uppercase tracking-widest text-white/70 hover:text-white"
+                >
+                  {pinHash ? 'Change PIN' : 'Set PIN'}
+                </button>
+                {pinHash && (
+                  <button
+                    onClick={() => setConfirmModal({
+                      title: 'Remove PIN?',
+                      message: 'Your app will no longer lock when backgrounded.',
+                      onConfirm: () => {
+                        setPinHash(null);
+                        localStorage.removeItem('pinHash');
+                        setBiometricEnabled(false);
+                        setIsLocked(false);
+                      }
+                    })}
+                    className="glass-button px-5 py-3 text-xs uppercase tracking-widest text-red-400/70 hover:text-red-400 border-red-500/20 hover:border-red-500/40"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Biometric toggle — only shown when PIN is active */}
+              {pinHash && (
+                <div className="flex items-center justify-between py-3 border-t border-white/[0.06]">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-white/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
+                      <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
+                      <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
+                      <path d="M2 12a10 10 0 0 1 18-6"/>
+                      <path d="M2 17a5 5 0 0 1 4.24-4.97"/>
+                      <path d="M3.34 22a10.2 10.2 0 0 1-.78-4"/>
+                      <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
+                      <path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>
+                    </svg>
+                    <div>
+                      <p className="text-sm">Biometric Unlock</p>
+                      <p className="text-xs text-white/40">Face ID or fingerprint</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onPointerDown={() => setBiometricEnabled(v => !v)}
+                    className={cn(
+                      "w-11 h-6 rounded-full border transition-all duration-300 relative shrink-0",
+                      biometricEnabled ? "bg-mint/30 border-mint/40" : "bg-white/5 border-white/10"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-0.5 w-5 h-5 rounded-full transition-all duration-300",
+                      biometricEnabled ? "left-[calc(100%-1.375rem)] bg-mint" : "left-0.5 bg-white/30"
+                    )} />
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )
@@ -1831,6 +1951,33 @@ export default function App() {
               setToast({ message: `Imported ${imported.length} transactions via AI!`, type: 'success' });
             }}
             categories={categories}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* PIN Lock Screen */}
+      <AnimatePresence>
+        {isLocked && pinHash && (
+          <PinLockScreen
+            pinHash={pinHash}
+            biometricEnabled={biometricEnabled}
+            onUnlock={() => setIsLocked(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* PIN Setup Modal */}
+      <AnimatePresence>
+        {isPinSetupOpen && (
+          <PinSetupModal
+            currentPinHash={pinHash}
+            onClose={() => setIsPinSetupOpen(false)}
+            onSave={async (newPin) => {
+              const h = await hashPin(newPin);
+              setPinHash(h);
+              localStorage.setItem('pinHash', h);
+              setIsPinSetupOpen(false);
+            }}
           />
         )}
       </AnimatePresence>
@@ -2068,6 +2215,274 @@ const ONBOARDING_GRADIENTS = [
   'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
   'linear-gradient(135deg, #2563eb 0%, #0891b2 100%)',
 ];
+
+// ===== PIN LOCK SCREEN =====
+function PinLockScreen({ pinHash, biometricEnabled, onUnlock }: { pinHash: string; biometricEnabled: boolean; onUnlock: () => void }) {
+  const [entered, setEntered] = useState('');
+  const [shake, setShake] = useState(false);
+  const [error, setError] = useState(false);
+  const [biometryAvailable, setBiometryAvailable] = useState(false);
+
+  // Check biometry on mount and trigger prompt automatically if enabled
+  useEffect(() => {
+    if (!biometricEnabled) return;
+    import('@aparajita/capacitor-biometric-auth').then(({ BiometricAuth }) => {
+      BiometricAuth.checkBiometry().then(result => {
+        if (result.isAvailable) {
+          setBiometryAvailable(true);
+          triggerBiometric(BiometricAuth);
+        }
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [biometricEnabled]);
+
+  const triggerBiometric = (BiometricAuth: { authenticate: (opts: object) => Promise<void> }) => {
+    BiometricAuth.authenticate({
+      reason: 'Unlock Financial Atmosphere',
+      cancelTitle: 'Use PIN',
+    }).then(() => {
+      onUnlock();
+    }).catch(() => {
+      // User cancelled or failed — fall back to PIN, no error shown
+    });
+  };
+
+  const handleBiometricPress = () => {
+    import('@aparajita/capacitor-biometric-auth').then(({ BiometricAuth }) => {
+      triggerBiometric(BiometricAuth);
+    });
+  };
+
+  const handleDigit = (d: string) => {
+    if (entered.length >= 4) return;
+    const next = entered + d;
+    setEntered(next);
+    if (next.length === 4) {
+      hashPin(next).then(h => {
+        if (h === pinHash) {
+          onUnlock();
+        } else {
+          setShake(true);
+          setError(true);
+          setTimeout(() => { setEntered(''); setShake(false); setError(false); }, 600);
+        }
+      });
+    }
+  };
+
+  const handleDelete = () => setEntered(prev => prev.slice(0, -1));
+
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020617]"
+    >
+      <div className="flex flex-col items-center gap-10 w-full max-w-xs px-8">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-mint/20 flex items-center justify-center text-mint mb-1">
+            <Lock className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-light tracking-wide">Enter PIN</h2>
+          <p className="text-xs text-white/40">Financial Atmosphere is locked</p>
+        </div>
+
+        {/* PIN dots */}
+        <motion.div
+          animate={shake ? { x: [0, -10, 10, -10, 10, 0] } : {}}
+          transition={{ duration: 0.4 }}
+          className="flex gap-4"
+        >
+          {[0,1,2,3].map(i => (
+            <div
+              key={i}
+              className={cn(
+                "w-4 h-4 rounded-full border-2 transition-all duration-150",
+                entered.length > i
+                  ? error ? "bg-red-400 border-red-400" : "bg-mint border-mint"
+                  : "border-white/20 bg-transparent"
+              )}
+            />
+          ))}
+        </motion.div>
+
+        {/* Numpad */}
+        <div className="grid grid-cols-3 gap-3 w-full">
+          {keys.map((k, i) => {
+            if (k === '') {
+              // Bottom-left: biometric button if available and enabled, else empty
+              return biometryAvailable && biometricEnabled ? (
+                <button
+                  key={i}
+                  onPointerDown={handleBiometricPress}
+                  className="h-16 rounded-2xl glass-button flex items-center justify-center text-white/50 hover:text-white active:scale-95 transition-all"
+                >
+                  {/* Fingerprint icon */}
+                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
+                    <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
+                    <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
+                    <path d="M2 12a10 10 0 0 1 18-6"/>
+                    <path d="M2 17a5 5 0 0 1 4.24-4.97"/>
+                    <path d="M3.34 22a10.2 10.2 0 0 1-.78-4"/>
+                    <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
+                    <path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>
+                  </svg>
+                </button>
+              ) : <div key={i} />;
+            }
+            if (k === '⌫') return (
+              <button
+                key={i}
+                onPointerDown={handleDelete}
+                className="h-16 rounded-2xl glass-button flex items-center justify-center text-white/50 hover:text-white active:scale-95 transition-all"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+                  <line x1="18" y1="9" x2="13" y2="14"/>
+                  <line x1="13" y1="9" x2="18" y2="14"/>
+                </svg>
+              </button>
+            );
+            return (
+              <button
+                key={i}
+                onPointerDown={() => handleDigit(k)}
+                className="h-16 rounded-2xl glass-button flex items-center justify-center text-xl font-light hover:bg-white/10 active:scale-95 transition-all"
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ===== PIN SETUP MODAL =====
+function PinSetupModal({ currentPinHash, onClose, onSave }: {
+  currentPinHash: string | null;
+  onClose: () => void;
+  onSave: (pin: string) => Promise<void>;
+}) {
+  const [step, setStep] = useState<'current' | 'new' | 'confirm'>(currentPinHash ? 'current' : 'new');
+  const [entered, setEntered] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [shake, setShake] = useState(false);
+  const [error, setError] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const label = step === 'current' ? 'Enter current PIN' : step === 'new' ? 'Set new PIN' : 'Confirm new PIN';
+  const sub = step === 'current' ? 'Verify your identity first' : step === 'new' ? 'Choose a 4-digit PIN' : 'Enter the PIN again to confirm';
+
+  const handleDigit = (d: string) => {
+    if (entered.length >= 4 || saving) return;
+    const next = entered + d;
+    setEntered(next);
+    if (next.length === 4) {
+      if (step === 'current') {
+        hashPin(next).then(h => {
+          if (h === currentPinHash) {
+            setEntered('');
+            setStep('new');
+          } else {
+            setShake(true); setError(true);
+            setTimeout(() => { setEntered(''); setShake(false); setError(false); }, 600);
+          }
+        });
+      } else if (step === 'new') {
+        setNewPin(next);
+        setEntered('');
+        setStep('confirm');
+      } else {
+        if (next === newPin) {
+          setSaving(true);
+          onSave(next);
+        } else {
+          setShake(true); setError(true);
+          setTimeout(() => { setEntered(''); setShake(false); setError(false); setStep('new'); setNewPin(''); }, 600);
+        }
+      }
+    }
+  };
+
+  const handleDelete = () => setEntered(prev => prev.slice(0, -1));
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 16 }}
+        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+        className="relative w-full max-w-xs mx-4 bg-slate-950 border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center gap-8"
+      >
+        <button onClick={onClose} className="absolute top-5 right-5 text-white/30 hover:text-white transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex flex-col items-center gap-2 text-center">
+          <h3 className="text-lg font-light">{label}</h3>
+          <p className="text-xs text-white/40">{sub}</p>
+        </div>
+
+        {/* PIN dots */}
+        <motion.div
+          animate={shake ? { x: [0, -10, 10, -10, 10, 0] } : {}}
+          transition={{ duration: 0.4 }}
+          className="flex gap-4"
+        >
+          {[0,1,2,3].map(i => (
+            <div
+              key={i}
+              className={cn(
+                "w-4 h-4 rounded-full border-2 transition-all duration-150",
+                entered.length > i
+                  ? error ? "bg-red-400 border-red-400" : "bg-mint border-mint"
+                  : "border-white/20 bg-transparent"
+              )}
+            />
+          ))}
+        </motion.div>
+
+        {/* Numpad */}
+        <div className="grid grid-cols-3 gap-3 w-full">
+          {keys.map((k, i) => {
+            if (k === '') return <div key={i} />;
+            if (k === '⌫') return (
+              <button
+                key={i}
+                onPointerDown={handleDelete}
+                className="h-14 rounded-2xl glass-button flex items-center justify-center text-white/50 hover:text-white active:scale-95 transition-all"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+                  <line x1="18" y1="9" x2="13" y2="14"/>
+                  <line x1="13" y1="9" x2="18" y2="14"/>
+                </svg>
+              </button>
+            );
+            return (
+              <button
+                key={i}
+                onPointerDown={() => handleDigit(k)}
+                className="h-14 rounded-2xl glass-button flex items-center justify-center text-xl font-light hover:bg-white/10 active:scale-95 transition-all"
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 interface OnboardingModalProps {
   isOpen: boolean;
