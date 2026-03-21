@@ -595,7 +595,7 @@ export default function App() {
                   <motion.div
                     layoutId="nav-pill"
                     className="absolute inset-0 rounded-xl bg-white/10 border border-white/10"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 42, mass: 0.8 }}
                   />
                 )}
                 <Icon className="w-4 h-4 relative z-10" />
@@ -623,7 +623,9 @@ export default function App() {
       </header>
 
       {/* Mobile bottom navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-2 py-2 bg-black/60 backdrop-blur-2xl border-t border-white/[0.08]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch bg-black/70 backdrop-blur-2xl border-t border-white/[0.08]"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         {([
           { id: 'dashboard', label: 'Home',     icon: LayoutDashboard },
           { id: 'history',   label: 'History',  icon: History },
@@ -634,15 +636,15 @@ export default function App() {
             key={id}
             onClick={() => setActiveTab(id)}
             className={cn(
-              "flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300 min-w-[60px]",
-              activeTab === id ? "text-mint" : "text-white/40"
+              "relative flex-1 flex flex-col items-center justify-center gap-1 py-3 min-h-[56px] transition-colors duration-150",
+              activeTab === id ? "text-mint" : "text-white/35"
             )}
           >
             {activeTab === id && (
               <motion.div
                 layoutId="mobile-nav-pill"
-                className="absolute inset-0 rounded-2xl bg-mint/10"
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                className="absolute inset-x-2 inset-y-1.5 rounded-2xl bg-mint/10"
+                transition={{ type: "spring", stiffness: 500, damping: 42, mass: 0.8 }}
               />
             )}
             <Icon className="w-5 h-5 relative z-10" />
@@ -653,11 +655,12 @@ export default function App() {
 
       <AnimatePresence mode="wait">
         {activeTab === 'dashboard' ? (
-          <motion.div 
+          <motion.div
             key="dashboard"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             className="grid grid-cols-1 lg:grid-cols-3 gap-8"
           >
             {/* Stats Section */}
@@ -694,10 +697,10 @@ export default function App() {
                     {currentCard ? (
                       <motion.div
                         key={currentCardIndex}
-                        initial={{ opacity: 0, x: 60, scale: 0.95 }}
+                        initial={{ opacity: 0, x: 30, scale: 0.97 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: -60, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        exit={{ opacity: 0, x: -30, scale: 0.97 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.8 }}
                         className="w-full flex justify-center"
                       >
                         <VirtualCard
@@ -1141,11 +1144,12 @@ export default function App() {
             </div>
           </motion.div>
         ) : activeTab === 'history' ? (
-          <motion.div 
+          <motion.div
             key="history"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             className="glass-panel p-5 md:p-8"
           >
             <div className="mb-8 space-y-4">
@@ -1399,11 +1403,12 @@ export default function App() {
             )}
           </motion.div>
         ) : activeTab === 'reports' ? (
-          <motion.div 
+          <motion.div
             key="reports"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             className="space-y-8"
           >
             <div className="glass-panel p-5 md:p-8">
@@ -1520,11 +1525,12 @@ export default function App() {
             </div>
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             key="settings"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             className="max-w-2xl mx-auto space-y-8"
           >
             <div className="glass-panel p-8 bg-slate-900/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10">
@@ -1577,6 +1583,7 @@ export default function App() {
                   >
                     <motion.div
                       animate={{ x: !isDarkMode ? 24 : 0 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
                       className={cn("w-4 h-4 rounded-full", !isDarkMode ? "bg-mint" : "bg-white/40")}
                     />
                   </button>
@@ -1596,8 +1603,9 @@ export default function App() {
                       isPrivacyMode ? "bg-mint/20" : "bg-white/10"
                     )}
                   >
-                    <motion.div 
+                    <motion.div
                       animate={{ x: isPrivacyMode ? 24 : 0 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
                       className={cn(
                         "w-4 h-4 rounded-full",
                         isPrivacyMode ? "bg-mint" : "bg-white/40"
@@ -1733,52 +1741,47 @@ export default function App() {
 }
       </AnimatePresence>
 
-      {/* Add Transaction Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass-panel p-5 md:p-8 w-full max-w-md relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10"
-            >
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-light">New Entry</h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-              
-              <AddTransactionForm onSubmit={addTransaction} categories={categories} />
-            </motion.div>
-          </div>
+      {/* Add Transaction Modal — always mounted, toggled with CSS for instant open */}
+      <div
+        className={cn(
+          "fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 transition-opacity duration-150",
+          isModalOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         )}
-      </AnimatePresence>
+      >
+        <div
+          onClick={() => setIsModalOpen(false)}
+          className="absolute inset-0 bg-black/75"
+        />
+        <div
+          className={cn(
+            "w-full sm:max-w-md relative z-10 bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-3xl p-5 md:p-8 shadow-2xl transition-transform duration-150",
+            isModalOpen ? "translate-y-0" : "translate-y-4"
+          )}
+        >
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-light">New Entry</h3>
+            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          <AddTransactionForm onSubmit={addTransaction} categories={categories} />
+        </div>
+      </div>
 
       {/* Confirmation Modal */}
       <AnimatePresence>
         {confirmModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
               onClick={() => setConfirmModal(null)}
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              className="absolute inset-0 bg-black/80"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass-panel p-5 md:p-8 w-full max-w-sm relative z-10 bg-slate-950 border-white/10"
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              className="w-full max-w-sm relative z-10 bg-slate-950 border border-white/10 rounded-3xl p-5 md:p-8 shadow-2xl"
             >
               <h3 className="text-xl font-light mb-4">{confirmModal.title}</h3>
               <p className="text-sm text-white/60 mb-8 leading-relaxed">{confirmModal.message}</p>
@@ -1859,9 +1862,10 @@ export default function App() {
       <AnimatePresence>
         {toast && (
           <motion.div 
-            initial={{ opacity: 0, y: 50, x: '-50%' }}
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            exit={{ opacity: 0, y: 8, x: '-50%' }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
             className={cn(
               "fixed bottom-8 left-1/2 z-[70] px-6 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl flex items-center gap-3 min-w-[240px] sm:min-w-[300px]",
               toast.type === 'success' ? "bg-mint/10 border-mint/20 text-mint" : "bg-red-500/10 border-red-500/20 text-red-400"
@@ -2130,9 +2134,9 @@ function OnboardingModal({ isOpen, onComplete, accentColor, setAccentColor, isDa
   };
 
   const variants = {
-    enter: (d: number) => ({ opacity: 0, x: d > 0 ? 40 : -40 }),
+    enter: (d: number) => ({ opacity: 0, x: d > 0 ? 20 : -20 }),
     center: { opacity: 1, x: 0 },
-    exit: (d: number) => ({ opacity: 0, x: d > 0 ? -40 : 40 }),
+    exit: (d: number) => ({ opacity: 0, x: d > 0 ? -20 : 20 }),
   };
 
   const steps = [
@@ -2350,13 +2354,13 @@ function OnboardingModal({ isOpen, onComplete, accentColor, setAccentColor, isDa
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            className="absolute inset-0 bg-black/80"
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
             className="glass-panel relative w-full max-w-md p-5 md:p-8 flex flex-col gap-6"
           >
             {/* Progress dots */}
@@ -2759,10 +2763,10 @@ function GoalsModal({ goals, onClose, onSave }: {
       onClick={onClose}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 8 }}
+        transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
         className="glass-panel p-5 md:p-8 w-full max-w-md max-h-[80vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
@@ -2968,12 +2972,12 @@ ${statementText}`;
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/75"
       />
       <motion.div
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 8 }}
         className="glass-panel p-5 md:p-8 w-full max-w-2xl relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10 max-h-[85vh] flex flex-col"
       >
         {/* Header */}
