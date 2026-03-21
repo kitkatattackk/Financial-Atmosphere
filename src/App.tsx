@@ -56,7 +56,7 @@ import {
   BarChart,
   Bar
 } from 'recharts';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfYear, endOfYear, isAfter, isBefore, isSameDay, subMonths, differenceInDays } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, startOfYear, endOfYear, isAfter, isBefore, isSameDay, subMonths, addMonths, eachDayOfInterval, getDay, differenceInDays } from 'date-fns';
 import { Transaction, DEFAULT_CATEGORIES, Card, Goal } from './types';
 import { cn } from './utils';
 
@@ -190,6 +190,9 @@ export default function App() {
   const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('accentColor') || '#2dd4bf');
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
+  const [hasOnboarded, setHasOnboarded] = useState(() => IS_DEMO || localStorage.getItem('hasOnboarded') === 'true');
+  const [historyView, setHistoryView] = useState<'list' | 'calendar'>('list');
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const currentCard = cards[currentCardIndex];
 
@@ -556,22 +559,22 @@ export default function App() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-12 min-h-screen">
+    <div className="max-w-7xl mx-auto px-4 py-6 md:py-12 pb-28 md:pb-12 min-h-screen">
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
+      <header className="flex flex-row justify-between items-center mb-8 md:mb-12 gap-4">
         <div>
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-5xl font-light tracking-tight mb-2"
+            className="text-3xl md:text-5xl font-light tracking-tight mb-1"
           >
             Financial <span className="italic font-serif">Atmosphere</span>
           </motion.h1>
-          <p className="text-white/70 text-sm tracking-widest uppercase">Clarity through every transaction</p>
+          <p className="text-white/70 text-xs tracking-widest uppercase hidden sm:block">Clarity through every transaction</p>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <nav className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl p-1 backdrop-blur-xl">
+
+        <div className="flex items-center gap-2 md:gap-3">
+          <nav className="hidden md:flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl p-1 backdrop-blur-xl">
             {([
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
               { id: 'history',   label: 'History',   icon: History },
@@ -611,13 +614,42 @@ export default function App() {
 
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-mint/15 border border-mint/20 text-mint hover:bg-mint/25 hover:border-mint/30 transition-all duration-300 backdrop-blur-xl"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-mint/15 border border-mint/20 text-mint hover:bg-mint/25 hover:border-mint/30 transition-all duration-300 backdrop-blur-xl"
           >
             <Plus className="w-4 h-4" />
-            Add Entry
+            <span className="hidden sm:inline">Add Entry</span>
           </button>
         </div>
       </header>
+
+      {/* Mobile bottom navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-2 py-2 bg-black/60 backdrop-blur-2xl border-t border-white/[0.08]">
+        {([
+          { id: 'dashboard', label: 'Home',     icon: LayoutDashboard },
+          { id: 'history',   label: 'History',  icon: History },
+          { id: 'reports',   label: 'Reports',  icon: PieChartIcon },
+          { id: 'settings',  label: 'Settings', icon: Settings },
+        ] as const).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={cn(
+              "flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300 min-w-[60px]",
+              activeTab === id ? "text-mint" : "text-white/40"
+            )}
+          >
+            {activeTab === id && (
+              <motion.div
+                layoutId="mobile-nav-pill"
+                className="absolute inset-0 rounded-2xl bg-mint/10"
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+            )}
+            <Icon className="w-5 h-5 relative z-10" />
+            <span className="text-[10px] tracking-wide relative z-10">{label}</span>
+          </button>
+        ))}
+      </nav>
 
       <AnimatePresence mode="wait">
         {activeTab === 'dashboard' ? (
@@ -729,7 +761,7 @@ export default function App() {
               </div>
 
               {/* Main Chart */}
-              <div className="glass-panel p-8 h-[400px]">
+              <div className="glass-panel p-5 md:p-8 h-[240px] md:h-[400px]">
                 <div className="flex justify-between items-center mb-8">
                   <h3 className="text-xl font-light">Cash Flow Overview</h3>
                   <div className="flex gap-2 text-xs uppercase tracking-widest text-white/70 font-medium">
@@ -789,7 +821,7 @@ export default function App() {
             {/* Sidebar Section */}
             <div className="space-y-8">
               {/* Card Customizer */}
-              <div className="glass-panel p-8">
+              <div className="glass-panel p-5 md:p-8">
                 <div className="flex items-center gap-2 mb-6 text-mint">
                   <Sliders className="w-5 h-5" />
                   <h3 className="text-xl font-light">Customizer</h3>
@@ -908,7 +940,7 @@ export default function App() {
             {/* Middle Row: Savings, Insights, Pie Chart */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Savings Goals */}
-              <div className="glass-panel p-8">
+              <div className="glass-panel p-5 md:p-8">
                 <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-2 text-mint">
                     <Target className="w-5 h-5" />
@@ -961,7 +993,7 @@ export default function App() {
               </div>
 
               {/* Quick Insights */}
-              <div className="glass-panel p-8">
+              <div className="glass-panel p-5 md:p-8">
                 <div className="flex justify-between items-center mb-6">
                   <div className="flex items-center gap-2 text-orange-400">
                     <Zap className="w-5 h-5" />
@@ -989,7 +1021,7 @@ export default function App() {
               </div>
 
               {/* Category Breakdown */}
-              <div className="glass-panel p-8">
+              <div className="glass-panel p-5 md:p-8">
                 <h3 className="text-xl font-light mb-6 flex items-center gap-2">
                   <PieChartIcon className="w-5 h-5 opacity-50" />
                   Expenses
@@ -1059,26 +1091,29 @@ export default function App() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="text-white/40 text-[10px] uppercase tracking-widest border-b border-white/5">
-                      <th className="pb-4 font-medium">Date</th>
+                      <th className="pb-4 font-medium hidden sm:table-cell">Date</th>
                       <th className="pb-4 font-medium">Description</th>
-                      <th className="pb-4 font-medium">Category</th>
-                      <th className="pb-4 font-medium">Type</th>
+                      <th className="pb-4 font-medium hidden md:table-cell">Category</th>
+                      <th className="pb-4 font-medium hidden sm:table-cell">Type</th>
                       <th className="pb-4 font-medium text-right">Amount</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {transactions.slice(0, 6).map(t => (
                       <tr key={t.id} className="group hover:bg-white/5 transition-colors">
-                        <td className="py-4 text-xs text-white/40">{format(parseISO(t.date), 'MMM dd, yyyy')}</td>
-                        <td className="py-4">
-                          <span className="text-sm font-medium text-white group-hover:text-orange-400 transition-colors">{t.description}</span>
+                        <td className="py-3 text-xs text-white/40 hidden sm:table-cell">{format(parseISO(t.date), 'MMM dd')}</td>
+                        <td className="py-3">
+                          <div>
+                            <span className="text-sm font-medium text-white group-hover:text-orange-400 transition-colors line-clamp-1">{t.description}</span>
+                            <span className="text-[10px] text-white/40 sm:hidden">{format(parseISO(t.date), 'MMM dd')} · {t.category}</span>
+                          </div>
                         </td>
-                        <td className="py-4">
+                        <td className="py-3 hidden md:table-cell">
                           <span className="px-2 py-1 rounded-lg bg-white/5 text-[10px] text-white/60 border border-white/10">
                             {t.category}
                           </span>
                         </td>
-                        <td className="py-4">
+                        <td className="py-3 hidden sm:table-cell">
                           <div className="flex items-center gap-1.5">
                             {t.type === 'income' ? (
                               <ArrowUpRight className="w-3 h-3 text-emerald-400" />
@@ -1093,7 +1128,7 @@ export default function App() {
                             </span>
                           </div>
                         </td>
-                        <td className="py-4 text-right font-mono text-sm">
+                        <td className="py-3 text-right font-mono text-sm">
                           <span className={t.type === 'income' ? "text-emerald-400" : "text-white"}>
                             {t.type === 'income' ? '+' : '-'}${isPrivacyMode ? '••••' : t.amount.toLocaleString()}
                           </span>
@@ -1111,20 +1146,50 @@ export default function App() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="glass-panel p-8"
+            className="glass-panel p-5 md:p-8"
           >
             <div className="mb-8 space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h3 className="text-2xl font-light">Transaction History</h3>
-                <button
-                  onClick={() => { setSearchTerm(''); setFilterType('all'); setFilterCategory('all'); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); }}
-                  className="text-[10px] uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors"
-                >
-                  Clear all filters
-                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-white/5 border border-white/10 rounded-xl p-1">
+                    {(['list', 'calendar'] as const).map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setHistoryView(v)}
+                        className={cn(
+                          "px-3 py-1 rounded-lg text-xs uppercase tracking-widest transition-all capitalize flex items-center gap-1.5",
+                          historyView === v ? "bg-white/20 text-white font-medium" : "text-white/40 hover:text-white"
+                        )}
+                      >
+                        {v === 'list' ? <History className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {historyView === 'list' && (
+                    <button
+                      onClick={() => { setSearchTerm(''); setFilterType('all'); setFilterCategory('all'); setStartDate(''); setEndDate(''); setMinAmount(''); setMaxAmount(''); }}
+                      className="text-[10px] uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
+                </div>
               </div>
 
+              {historyView === 'calendar' && (
+                <CalendarView
+                  transactions={transactions}
+                  calendarMonth={calendarMonth}
+                  setCalendarMonth={setCalendarMonth}
+                  isPrivacyMode={isPrivacyMode}
+                  deleteTransaction={deleteTransaction}
+                />
+              )}
+
               {/* Filter Row */}
+              {historyView === 'list' && (
               <div className="flex flex-wrap gap-3 items-center">
                 {/* Search */}
                 <div className="relative flex-1 min-w-[160px]">
@@ -1170,14 +1235,14 @@ export default function App() {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark] w-[120px]"
+                    className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark] w-[100px]"
                   />
                   <span className="text-white/20 text-xs">–</span>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark] w-[120px]"
+                    className="bg-transparent text-xs text-white/70 outline-none [color-scheme:dark] w-[100px]"
                   />
                   {(startDate || endDate) && (
                     <button onClick={() => { setStartDate(''); setEndDate(''); }} className="ml-1 text-white/30 hover:text-white/60 transition-colors">
@@ -1211,9 +1276,10 @@ export default function App() {
                   )}
                 </div>
               </div>
+              )}
 
               {/* Active filter pills */}
-              {(searchTerm || filterType !== 'all' || filterCategory !== 'all' || startDate || endDate || minAmount || maxAmount) && (
+              {historyView === 'list' && (searchTerm || filterType !== 'all' || filterCategory !== 'all' || startDate || endDate || minAmount || maxAmount) && (
                 <div className="flex flex-wrap gap-2">
                   {searchTerm && (
                     <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-mint/10 border border-mint/20 text-mint text-xs">
@@ -1244,12 +1310,13 @@ export default function App() {
                 </div>
               )}
             </div>
+            {historyView === 'list' && (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-white/70 text-xs uppercase tracking-widest border-b border-white/20">
-                    <th className="pb-4 font-medium">
-                      <button 
+                    <th className="pb-4 font-medium hidden sm:table-cell">
+                      <button
                         onClick={() => handleSort('date')}
                         className="flex items-center gap-1 hover:text-white transition-colors"
                       >
@@ -1260,8 +1327,8 @@ export default function App() {
                       </button>
                     </th>
                     <th className="pb-4 font-medium">Description</th>
-                    <th className="pb-4 font-medium">
-                      <button 
+                    <th className="pb-4 font-medium hidden md:table-cell">
+                      <button
                         onClick={() => handleSort('category')}
                         className="flex items-center gap-1 hover:text-white transition-colors"
                       >
@@ -1271,9 +1338,9 @@ export default function App() {
                         ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
                       </button>
                     </th>
-                    <th className="pb-4 font-medium">Type</th>
+                    <th className="pb-4 font-medium hidden sm:table-cell">Type</th>
                     <th className="pb-4 font-medium text-right">
-                      <button 
+                      <button
                         onClick={() => handleSort('amount')}
                         className="flex items-center gap-1 hover:text-white transition-colors ml-auto"
                       >
@@ -1289,14 +1356,17 @@ export default function App() {
                 <tbody className="divide-y divide-white/5">
                   {sortedTransactions.map(t => (
                     <tr key={t.id} className="group hover:bg-white/10 transition-colors">
-                      <td className="py-4 text-sm text-white/80">{format(parseISO(t.date), 'MMM dd, yyyy')}</td>
-                      <td className="py-4 font-semibold">{t.description}</td>
-                      <td className="py-4">
+                      <td className="py-3 text-sm text-white/80 hidden sm:table-cell whitespace-nowrap">{format(parseISO(t.date), 'MMM dd, yy')}</td>
+                      <td className="py-3 max-w-[140px] sm:max-w-none">
+                        <div className="font-semibold truncate">{t.description}</div>
+                        <div className="text-[10px] text-white/40 sm:hidden">{format(parseISO(t.date), 'MMM dd')} · {t.category}</div>
+                      </td>
+                      <td className="py-3 hidden md:table-cell">
                         <span className="px-3 py-1 rounded-full bg-white/10 text-xs text-white font-medium border border-white/20">
                           {t.category}
                         </span>
                       </td>
-                      <td className="py-4">
+                      <td className="py-3 hidden sm:table-cell">
                         {t.type === 'income' ? (
                           <span className="text-emerald-400 flex items-center gap-1 text-xs">
                             <ArrowUpRight className="w-3 h-3" /> Income
@@ -1308,13 +1378,13 @@ export default function App() {
                         )}
                       </td>
                       <td className={cn(
-                        "py-4 text-right font-mono",
+                        "py-3 text-right font-mono text-sm whitespace-nowrap",
                         t.type === 'income' ? "text-emerald-400" : "text-white"
                       )}>
                         {t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}
                       </td>
-                      <td className="py-4 text-right">
-                        <button 
+                      <td className="py-3 text-right">
+                        <button
                           onClick={() => deleteTransaction(t.id)}
                           className="p-2 text-white/20 hover:text-red-400 transition-colors"
                         >
@@ -1326,6 +1396,7 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+            )}
           </motion.div>
         ) : activeTab === 'reports' ? (
           <motion.div 
@@ -1335,7 +1406,7 @@ export default function App() {
             exit={{ opacity: 0, y: -20 }}
             className="space-y-8"
           >
-            <div className="glass-panel p-8">
+            <div className="glass-panel p-5 md:p-8">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
                 <div>
                   <h3 className="text-2xl font-light mb-2">Spending Analysis</h3>
@@ -1364,8 +1435,8 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                <div className="h-[400px]">
-                  <h4 className="text-sm uppercase tracking-widest text-white/40 mb-8 text-center">Category Distribution</h4>
+                <div className="h-[280px] md:h-[400px]">
+                  <h4 className="text-sm uppercase tracking-widest text-white/40 mb-4 md:mb-8 text-center">Category Distribution</h4>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -1398,7 +1469,7 @@ export default function App() {
 
                 <div>
                   <h4 className="text-sm uppercase tracking-widest text-white/70 mb-4 text-center">Spending by Volume</h4>
-                  <ResponsiveContainer width="100%" height={Math.max(200, categoryData.length * 48)}>
+                  <ResponsiveContainer width="100%" height={Math.max(160, categoryData.length * 40)}>
                     <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                       <XAxis type="number" hide />
@@ -1558,6 +1629,7 @@ export default function App() {
                             setCards([]);
                             setGoals([]);
                             localStorage.clear();
+                            setHasOnboarded(false);
                             setToast({ message: 'All data has been reset.', type: 'success' });
                           }
                         });
@@ -1676,7 +1748,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass-panel p-8 w-full max-w-md relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10"
+              className="glass-panel p-5 md:p-8 w-full max-w-md relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10"
             >
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-light">New Entry</h3>
@@ -1706,7 +1778,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass-panel p-8 w-full max-w-sm relative z-10 bg-slate-950 border-white/10"
+              className="glass-panel p-5 md:p-8 w-full max-w-sm relative z-10 bg-slate-950 border-white/10"
             >
               <h3 className="text-xl font-light mb-4">{confirmModal.title}</h3>
               <p className="text-sm text-white/60 mb-8 leading-relaxed">{confirmModal.message}</p>
@@ -1760,6 +1832,29 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Onboarding */}
+      <OnboardingModal
+        isOpen={!hasOnboarded}
+        onComplete={() => {
+          setHasOnboarded(true);
+          localStorage.setItem('hasOnboarded', 'true');
+        }}
+        accentColor={accentColor}
+        setAccentColor={setAccentColor}
+        isDarkMode={isDarkMode}
+        setIsDarkMode={setIsDarkMode}
+        onAddCard={(card) => {
+          setCards(prev => [...prev, card]);
+          setCurrentCardIndex(0);
+        }}
+        onAddTransaction={(t) => {
+          const newT = { ...t, id: Math.random().toString(36).substr(2, 9) };
+          setTransactions(prev => [newT, ...prev]);
+          if (!categories.includes(t.category)) setCategories(prev => [...prev, t.category]);
+        }}
+        categories={categories}
+      />
+
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
@@ -1768,7 +1863,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 20, x: '-50%' }}
             className={cn(
-              "fixed bottom-8 left-1/2 z-[70] px-6 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl flex items-center gap-3 min-w-[300px]",
+              "fixed bottom-8 left-1/2 z-[70] px-6 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl flex items-center gap-3 min-w-[240px] sm:min-w-[300px]",
               toast.type === 'success' ? "bg-mint/10 border-mint/20 text-mint" : "bg-red-500/10 border-red-500/20 text-red-400"
             )}
           >
@@ -1781,6 +1876,521 @@ export default function App() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function CalendarView({ transactions, calendarMonth, setCalendarMonth, isPrivacyMode, deleteTransaction }: {
+  transactions: Transaction[];
+  calendarMonth: Date;
+  setCalendarMonth: (d: Date) => void;
+  isPrivacyMode: boolean;
+  deleteTransaction: (id: string) => void;
+}) {
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const monthStart = startOfMonth(calendarMonth);
+  const monthEnd = endOfMonth(calendarMonth);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startPadding = getDay(monthStart);
+
+  const txByDate = useMemo(() => {
+    const map: Record<string, Transaction[]> = {};
+    transactions.forEach(t => {
+      if (!map[t.date]) map[t.date] = [];
+      map[t.date].push(t);
+    });
+    return map;
+  }, [transactions]);
+
+  const selectedDayTxs = selectedDay ? (txByDate[selectedDay] || []) : [];
+
+  return (
+    <div className="space-y-4">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-2">
+        <button
+          onClick={() => { setCalendarMonth(addMonths(calendarMonth, -1)); setSelectedDay(null); }}
+          className="p-2 rounded-xl glass-button text-white/50 hover:text-white transition-all"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <h4 className="text-lg font-light">{format(calendarMonth, 'MMMM yyyy')}</h4>
+        <button
+          onClick={() => { setCalendarMonth(addMonths(calendarMonth, 1)); setSelectedDay(null); }}
+          className="p-2 rounded-xl glass-button text-white/50 hover:text-white transition-all"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Day-of-week labels */}
+      <div className="grid grid-cols-7 gap-1.5">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+          <div key={d} className="text-center text-[10px] uppercase tracking-widest text-white/30 pb-1">{d}</div>
+        ))}
+
+        {/* Leading empty cells */}
+        {Array.from({ length: startPadding }).map((_, i) => <div key={`pad-${i}`} />)}
+
+        {/* Day cells */}
+        {days.map(day => {
+          const key = format(day, 'yyyy-MM-dd');
+          const dayTxs = txByDate[key] || [];
+          const income = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+          const expense = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+          const isSelected = selectedDay === key;
+          const isToday = isSameDay(day, new Date());
+
+          return (
+            <button
+              key={key}
+              onClick={() => setSelectedDay(isSelected ? null : key)}
+              className={cn(
+                "min-h-[56px] md:min-h-[72px] rounded-xl md:rounded-2xl p-1.5 md:p-2 flex flex-col gap-1 text-left border transition-all duration-200",
+                isSelected
+                  ? "bg-white/10 border-white/20"
+                  : dayTxs.length > 0
+                    ? "bg-white/[0.03] border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.14]"
+                    : "border-transparent hover:bg-white/[0.03]"
+              )}
+            >
+              <span className={cn(
+                "text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full shrink-0",
+                isToday ? "bg-mint/20 text-mint" : "text-white/40"
+              )}>
+                {format(day, 'd')}
+              </span>
+
+              {dayTxs.length > 0 && (
+                <div className="flex flex-col gap-0.5 w-full min-w-0">
+                  {income > 0 && (
+                    <div className="text-[9px] font-mono text-emerald-400 truncate leading-tight">
+                      +{isPrivacyMode ? '••••' : `$${income % 1 === 0 ? income.toLocaleString() : income.toFixed(0)}`}
+                    </div>
+                  )}
+                  {expense > 0 && (
+                    <div className="text-[9px] font-mono text-orange-400 truncate leading-tight">
+                      -{isPrivacyMode ? '••••' : `$${expense % 1 === 0 ? expense.toLocaleString() : expense.toFixed(0)}`}
+                    </div>
+                  )}
+                  <div className="flex gap-0.5 mt-0.5 flex-wrap">
+                    {dayTxs.slice(0, 3).map(t => (
+                      <div
+                        key={t.id}
+                        className={cn("w-1.5 h-1.5 rounded-full shrink-0", t.type === 'income' ? 'bg-emerald-400' : 'bg-orange-400')}
+                      />
+                    ))}
+                    {dayTxs.length > 3 && (
+                      <span className="text-[8px] text-white/30 leading-none self-center">+{dayTxs.length - 3}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected day detail */}
+      <AnimatePresence>
+        {selectedDay && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+          >
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5">
+              <p className="text-xs uppercase tracking-widest text-white/40 mb-4">
+                {format(parseISO(selectedDay), 'MMMM d, yyyy')}
+                {selectedDayTxs.length > 0
+                  ? ` · ${selectedDayTxs.length} transaction${selectedDayTxs.length !== 1 ? 's' : ''}`
+                  : ' · No transactions'}
+              </p>
+              {selectedDayTxs.length === 0 ? (
+                <p className="text-sm text-white/30 text-center py-4">Nothing logged on this day.</p>
+              ) : (
+                <div className="space-y-0 divide-y divide-white/[0.05]">
+                  {selectedDayTxs.map(t => (
+                    <div key={t.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-center gap-3">
+                        <div className={cn("w-2 h-2 rounded-full shrink-0", t.type === 'income' ? 'bg-emerald-400' : 'bg-orange-400')} />
+                        <div>
+                          <p className="text-sm text-white">{t.description}</p>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider">{t.category}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className={cn("font-mono text-sm", t.type === 'income' ? 'text-emerald-400' : 'text-white')}>
+                          {t.type === 'income' ? '+' : '-'}${isPrivacyMode ? '••••' : t.amount.toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => deleteTransaction(t.id)}
+                          className="text-white/20 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+const ACCENT_COLORS = [
+  { label: 'Mint',    value: '#2dd4bf' },
+  { label: 'Violet',  value: '#8b5cf6' },
+  { label: 'Blue',    value: '#3b82f6' },
+  { label: 'Pink',    value: '#ec4899' },
+  { label: 'Amber',   value: '#f59e0b' },
+  { label: 'Rose',    value: '#f43f5e' },
+  { label: 'Emerald', value: '#10b981' },
+  { label: 'Indigo',  value: '#6366f1' },
+];
+
+const ONBOARDING_GRADIENTS = [
+  'linear-gradient(135deg, #2dd4bf 0%, #06b6d4 100%)',
+  'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)',
+  'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)',
+  'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+  'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
+  'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+  'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
+  'linear-gradient(135deg, #2563eb 0%, #0891b2 100%)',
+];
+
+interface OnboardingModalProps {
+  isOpen: boolean;
+  onComplete: () => void;
+  accentColor: string;
+  setAccentColor: (c: string) => void;
+  isDarkMode: boolean;
+  setIsDarkMode: (v: boolean) => void;
+  onAddCard: (card: Card) => void;
+  onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
+  categories: string[];
+}
+
+function OnboardingModal({ isOpen, onComplete, accentColor, setAccentColor, isDarkMode, setIsDarkMode, onAddCard, onAddTransaction, categories }: OnboardingModalProps) {
+  const TOTAL_STEPS = 5;
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+
+  // Card step state
+  const [cardName, setCardName] = useState('My Card');
+  const [cardGradient, setCardGradient] = useState(ONBOARDING_GRADIENTS[0]);
+  const [cardBalance, setCardBalance] = useState('');
+
+  // Transaction step state
+  const [txType, setTxType] = useState<'income' | 'expense'>('income');
+  const [txAmount, setTxAmount] = useState('');
+  const [txDesc, setTxDesc] = useState('');
+  const [txCategory, setTxCategory] = useState('Salary');
+
+  const go = (delta: number) => {
+    setDirection(delta);
+    setStep(s => s + delta);
+  };
+
+  const handleCardStep = () => {
+    if (cardName.trim()) {
+      onAddCard({
+        id: Math.random().toString(36).substr(2, 9),
+        name: cardName.trim(),
+        gradient: cardGradient,
+        scale: 1,
+        rotate: 0,
+        font: 'font-sans',
+        balance: parseFloat(cardBalance) || 0,
+        cardNumber: '•••• •••• •••• ••••',
+        expiryDate: 'MM/YY',
+      });
+    }
+    go(1);
+  };
+
+  const handleTxStep = () => {
+    const amt = parseFloat(txAmount);
+    if (amt > 0 && txDesc.trim()) {
+      onAddTransaction({
+        amount: amt,
+        description: txDesc.trim(),
+        category: txCategory,
+        date: new Date().toISOString().split('T')[0],
+        type: txType,
+      });
+    }
+    go(1);
+  };
+
+  const variants = {
+    enter: (d: number) => ({ opacity: 0, x: d > 0 ? 40 : -40 }),
+    center: { opacity: 1, x: 0 },
+    exit: (d: number) => ({ opacity: 0, x: d > 0 ? -40 : 40 }),
+  };
+
+  const steps = [
+    // Step 0: Welcome
+    <div className="flex flex-col items-center text-center gap-6">
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+        className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl"
+        style={{ background: `linear-gradient(135deg, ${accentColor}33, ${accentColor}11)`, border: `1px solid ${accentColor}33` }}
+      >
+        ✦
+      </motion.div>
+      <div>
+        <h2 className="text-3xl font-light tracking-tight mb-2">
+          Welcome to <span className="italic font-serif">Financial Atmosphere</span>
+        </h2>
+        <p className="text-white/50 text-sm leading-relaxed max-w-sm">
+          A calm, clear view of your finances. Let's take a minute to set things up.
+        </p>
+      </div>
+      <button
+        onClick={() => go(1)}
+        className="mt-2 px-8 py-3 rounded-2xl text-sm font-medium transition-all duration-300"
+        style={{ background: `${accentColor}22`, border: `1px solid ${accentColor}44`, color: accentColor }}
+      >
+        Get started →
+      </button>
+    </div>,
+
+    // Step 1: Personalize
+    <div className="flex flex-col gap-6 w-full">
+      <div className="text-center">
+        <h2 className="text-2xl font-light tracking-tight mb-1">Make it yours</h2>
+        <p className="text-white/40 text-xs tracking-widest uppercase">Appearance</p>
+      </div>
+
+      <div className="space-y-4">
+        <p className="text-white/60 text-xs uppercase tracking-widest">Accent color</p>
+        <div className="grid grid-cols-8 gap-2">
+          {ACCENT_COLORS.map(({ label, value }) => (
+            <button
+              key={value}
+              title={label}
+              onClick={() => setAccentColor(value)}
+              className="w-full aspect-square rounded-xl transition-all duration-200 relative"
+              style={{ background: value, outline: accentColor === value ? `2px solid ${value}` : 'none', outlineOffset: 2 }}
+            >
+              {accentColor === value && (
+                <span className="absolute inset-0 flex items-center justify-center text-white text-xs">✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-white/60 text-xs uppercase tracking-widest mt-4">Theme</p>
+        <div className="flex gap-3">
+          {[{ label: 'Dark', value: true, icon: '🌙' }, { label: 'Light', value: false, icon: '☀️' }].map(opt => (
+            <button
+              key={opt.label}
+              onClick={() => setIsDarkMode(opt.value)}
+              className={cn(
+                "flex-1 py-3 rounded-2xl text-sm transition-all duration-200 flex items-center justify-center gap-2 border",
+                isDarkMode === opt.value
+                  ? "border-white/20 bg-white/10 text-white"
+                  : "border-white/[0.06] bg-white/[0.03] text-white/40 hover:text-white/60"
+              )}
+            >
+              <span>{opt.icon}</span> {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-3 mt-2">
+        <button onClick={() => go(-1)} className="flex-1 py-3 rounded-2xl text-sm border border-white/[0.08] text-white/40 hover:text-white/60 transition-all">Back</button>
+        <button onClick={() => go(1)} className="flex-1 py-3 rounded-2xl text-sm font-medium transition-all" style={{ background: `${accentColor}22`, border: `1px solid ${accentColor}44`, color: accentColor }}>Next →</button>
+      </div>
+    </div>,
+
+    // Step 2: Add a card
+    <div className="flex flex-col gap-5 w-full">
+      <div className="text-center">
+        <h2 className="text-2xl font-light tracking-tight mb-1">Add a card</h2>
+        <p className="text-white/40 text-xs tracking-widest uppercase">Optional</p>
+      </div>
+
+      {/* Mini card preview */}
+      <div className="h-28 rounded-2xl flex items-end p-4 transition-all duration-500" style={{ background: cardGradient }}>
+        <div>
+          <p className="text-white/70 text-[10px] tracking-widest uppercase">Card</p>
+          <p className="text-white font-medium text-sm">{cardName || 'My Card'}</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <input
+          value={cardName}
+          onChange={e => setCardName(e.target.value)}
+          placeholder="Card name"
+          className="w-full px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 text-sm outline-none focus:border-white/20 transition-all"
+        />
+        <input
+          value={cardBalance}
+          onChange={e => setCardBalance(e.target.value)}
+          placeholder="Current balance (optional)"
+          type="number"
+          className="w-full px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 text-sm outline-none focus:border-white/20 transition-all"
+        />
+        <div className="grid grid-cols-8 gap-1.5">
+          {ONBOARDING_GRADIENTS.map(g => (
+            <button
+              key={g}
+              onClick={() => setCardGradient(g)}
+              className="aspect-square rounded-xl transition-all duration-200"
+              style={{ background: g, outline: cardGradient === g ? '2px solid white' : 'none', outlineOffset: 1 }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={() => go(-1)} className="flex-1 py-3 rounded-2xl text-sm border border-white/[0.08] text-white/40 hover:text-white/60 transition-all">Back</button>
+        <button onClick={() => go(1)} className="flex-1 py-3 rounded-2xl text-sm border border-white/[0.08] text-white/40 hover:text-white/60 transition-all">Skip</button>
+        <button onClick={handleCardStep} className="flex-1 py-3 rounded-2xl text-sm font-medium transition-all" style={{ background: `${accentColor}22`, border: `1px solid ${accentColor}44`, color: accentColor }}>Add →</button>
+      </div>
+    </div>,
+
+    // Step 3: Log first transaction
+    <div className="flex flex-col gap-5 w-full">
+      <div className="text-center">
+        <h2 className="text-2xl font-light tracking-tight mb-1">Log a transaction</h2>
+        <p className="text-white/40 text-xs tracking-widest uppercase">Optional</p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex rounded-2xl overflow-hidden border border-white/[0.08] bg-white/[0.02]">
+          {(['income', 'expense'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTxType(t); setTxCategory(t === 'income' ? 'Salary' : 'Food'); }}
+              className={cn(
+                "flex-1 py-2.5 text-sm font-medium capitalize transition-all duration-200",
+                txType === t
+                  ? t === 'income' ? "bg-emerald-500/20 text-emerald-400" : "bg-orange-500/20 text-orange-400"
+                  : "text-white/30 hover:text-white/50"
+              )}
+            >{t}</button>
+          ))}
+        </div>
+
+        <input
+          value={txAmount}
+          onChange={e => setTxAmount(e.target.value)}
+          placeholder="Amount"
+          type="number"
+          className="w-full px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 text-sm outline-none focus:border-white/20 transition-all"
+        />
+        <input
+          value={txDesc}
+          onChange={e => setTxDesc(e.target.value)}
+          placeholder="Description (e.g. Monthly Salary)"
+          className="w-full px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 text-sm outline-none focus:border-white/20 transition-all"
+        />
+        <select
+          value={txCategory}
+          onChange={e => setTxCategory(e.target.value)}
+          className="w-full px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-white text-sm outline-none focus:border-white/20 transition-all"
+          style={{ colorScheme: 'dark' }}
+        >
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={() => go(-1)} className="flex-1 py-3 rounded-2xl text-sm border border-white/[0.08] text-white/40 hover:text-white/60 transition-all">Back</button>
+        <button onClick={() => go(1)} className="flex-1 py-3 rounded-2xl text-sm border border-white/[0.08] text-white/40 hover:text-white/60 transition-all">Skip</button>
+        <button onClick={handleTxStep} disabled={!txAmount || !txDesc} className="flex-1 py-3 rounded-2xl text-sm font-medium transition-all disabled:opacity-40" style={{ background: `${accentColor}22`, border: `1px solid ${accentColor}44`, color: accentColor }}>Add →</button>
+      </div>
+    </div>,
+
+    // Step 4: Done
+    <div className="flex flex-col items-center text-center gap-6">
+      <motion.div
+        initial={{ scale: 0, rotate: -20 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 18, delay: 0.1 }}
+        className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl"
+        style={{ background: `linear-gradient(135deg, ${accentColor}33, ${accentColor}11)`, border: `1px solid ${accentColor}44` }}
+      >
+        ✦
+      </motion.div>
+      <div>
+        <h2 className="text-3xl font-light tracking-tight mb-2">You're all set</h2>
+        <p className="text-white/50 text-sm leading-relaxed max-w-sm">
+          Your dashboard is ready. Add transactions anytime with the <span className="text-white/70">Add Entry</span> button.
+        </p>
+      </div>
+      <button
+        onClick={onComplete}
+        className="mt-2 px-8 py-3 rounded-2xl text-sm font-medium transition-all duration-300"
+        style={{ background: `${accentColor}22`, border: `1px solid ${accentColor}44`, color: accentColor }}
+      >
+        Open Dashboard
+      </button>
+    </div>,
+  ];
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="glass-panel relative w-full max-w-md p-5 md:p-8 flex flex-col gap-6"
+          >
+            {/* Progress dots */}
+            <div className="flex justify-center gap-1.5">
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-1 rounded-full transition-all duration-300"
+                  style={{
+                    width: i === step ? 24 : 6,
+                    background: i <= step ? accentColor : 'rgba(255,255,255,0.12)',
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Step content */}
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={step}
+                custom={direction}
+                variants={variants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+              >
+                {steps[step]}
+              </motion.div>
+            </AnimatePresence>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -2153,7 +2763,7 @@ function GoalsModal({ goals, onClose, onSave }: {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="glass-panel p-8 w-full max-w-md max-h-[80vh] flex flex-col"
+        className="glass-panel p-5 md:p-8 w-full max-w-md max-h-[80vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
@@ -2364,7 +2974,7 @@ ${statementText}`;
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="glass-panel p-8 w-full max-w-2xl relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10 max-h-[85vh] flex flex-col"
+        className="glass-panel p-5 md:p-8 w-full max-w-2xl relative z-10 bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/10 max-h-[85vh] flex flex-col"
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
