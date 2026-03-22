@@ -39,7 +39,8 @@ import {
   CheckCircle2,
   Circle,
   Sun,
-  Moon
+  Moon,
+  Fingerprint
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { 
@@ -199,13 +200,9 @@ export default function App() {
   const [historyView, setHistoryView] = useState<'list' | 'calendar'>('list');
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [pinHash, setPinHash] = useState<string | null>(() => localStorage.getItem('pinHash'));
-  const [isLocked, setIsLocked] = useState(() => !!localStorage.getItem('pinHash'));
+  const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem('biometricEnabled') === 'true');
+  const [isLocked, setIsLocked] = useState(() => !!localStorage.getItem('pinHash') || localStorage.getItem('biometricEnabled') === 'true');
   const [isPinSetupOpen, setIsPinSetupOpen] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(() => {
-    const stored = localStorage.getItem('biometricEnabled');
-    if (stored === null) return !!localStorage.getItem('pinHash'); // default on when PIN exists
-    return stored === 'true';
-  });
 
   const currentCard = cards[currentCardIndex];
 
@@ -255,12 +252,12 @@ export default function App() {
 
   // Lock on background — use Capacitor's resume listener on native, visibilitychange on web
   useEffect(() => {
-    if (!pinHash) return;
+    if (!pinHash && !biometricEnabled) return;
     let removeListener: (() => void) | null = null;
 
     import('@aparajita/capacitor-biometric-auth').then(({ BiometricAuth }) => {
       BiometricAuth.addResumeListener(() => {
-        if (localStorage.getItem('pinHash')) setIsLocked(true);
+        if (localStorage.getItem('pinHash') || localStorage.getItem('biometricEnabled') === 'true') setIsLocked(true);
       }).then(handle => {
         removeListener = () => handle.remove();
       }).catch(() => {});
@@ -268,7 +265,7 @@ export default function App() {
 
     // Web fallback
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden' && localStorage.getItem('pinHash')) {
+      if (document.visibilityState === 'hidden' && (localStorage.getItem('pinHash') || localStorage.getItem('biometricEnabled') === 'true')) {
         setIsLocked(true);
       }
     };
@@ -278,7 +275,7 @@ export default function App() {
       removeListener?.();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [pinHash]);
+  }, [pinHash, biometricEnabled]);
 
   useEffect(() => {
     localStorage.setItem('biometricEnabled', biometricEnabled.toString());
@@ -1658,16 +1655,6 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium">Biometric Login</h4>
-                    <p className="text-xs text-white/40">Use FaceID or TouchID</p>
-                  </div>
-                  <button className="w-12 h-6 rounded-full bg-mint/20 relative p-1 transition-all">
-                    <div className="w-4 h-4 rounded-full bg-mint ml-auto" />
-                  </button>
-                </div>
-
                 <div className="pt-8 border-t border-white/10">
                   <h4 className="text-sm font-medium mb-4">Data Management</h4>
                   <div className="flex gap-4">
@@ -1821,40 +1808,29 @@ export default function App() {
                 )}
               </div>
 
-              {/* Biometric toggle — only shown when PIN is active */}
-              {pinHash && (
-                <div className="flex items-center justify-between py-3 border-t border-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-white/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
-                      <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
-                      <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
-                      <path d="M2 12a10 10 0 0 1 18-6"/>
-                      <path d="M2 17a5 5 0 0 1 4.24-4.97"/>
-                      <path d="M3.34 22a10.2 10.2 0 0 1-.78-4"/>
-                      <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
-                      <path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>
-                    </svg>
-                    <div>
-                      <p className="text-sm">Biometric Unlock</p>
-                      <p className="text-xs text-white/40">Face ID or fingerprint</p>
-                    </div>
+              {/* Biometric toggle */}
+              <div className="flex items-center justify-between py-3 border-t border-white/[0.06]">
+                <div className="flex items-center gap-3">
+                  <Fingerprint className="w-5 h-5 text-white/40" />
+                  <div>
+                    <p className="text-sm">Biometric Unlock</p>
+                    <p className="text-xs text-white/40">Face ID or fingerprint</p>
                   </div>
-                  <button
-                    type="button"
-                    onPointerDown={() => setBiometricEnabled(v => !v)}
-                    className={cn(
-                      "w-11 h-6 rounded-full border transition-all duration-300 relative shrink-0",
-                      biometricEnabled ? "bg-mint/30 border-mint/40" : "bg-white/5 border-white/10"
-                    )}
-                  >
-                    <div className={cn(
-                      "absolute top-0.5 w-5 h-5 rounded-full transition-all duration-300",
-                      biometricEnabled ? "left-[calc(100%-1.375rem)] bg-mint" : "left-0.5 bg-white/30"
-                    )} />
-                  </button>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onPointerDown={() => setBiometricEnabled(v => !v)}
+                  className={cn(
+                    "w-11 h-6 rounded-full border transition-all duration-300 relative shrink-0",
+                    biometricEnabled ? "bg-mint/30 border-mint/40" : "bg-white/5 border-white/10"
+                  )}
+                >
+                  <div className={cn(
+                    "absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full transition-all duration-300",
+                    biometricEnabled ? "left-[calc(100%-1.375rem)] bg-mint" : "left-0.5 bg-white/30"
+                  )} />
+                </button>
+              </div>
             </div>
           </motion.div>
         )
@@ -1957,7 +1933,7 @@ export default function App() {
 
       {/* PIN Lock Screen */}
       <AnimatePresence>
-        {isLocked && pinHash && (
+        {isLocked && (pinHash || biometricEnabled) && (
           <PinLockScreen
             pinHash={pinHash}
             biometricEnabled={biometricEnabled}
@@ -2217,7 +2193,7 @@ const ONBOARDING_GRADIENTS = [
 ];
 
 // ===== PIN LOCK SCREEN =====
-function PinLockScreen({ pinHash, biometricEnabled, onUnlock }: { pinHash: string; biometricEnabled: boolean; onUnlock: () => void }) {
+function PinLockScreen({ pinHash, biometricEnabled, onUnlock }: { pinHash: string | null; biometricEnabled: boolean; onUnlock: () => void }) {
   const [entered, setEntered] = useState('');
   const [shake, setShake] = useState(false);
   const [error, setError] = useState(false);
@@ -2274,6 +2250,37 @@ function PinLockScreen({ pinHash, biometricEnabled, onUnlock }: { pinHash: strin
 
   const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
+  const fingerprintIcon = <Fingerprint className="w-6 h-6" />;
+
+  // Biometric-only mode (no PIN set)
+  if (!pinHash) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020617]"
+      >
+        <div className="flex flex-col items-center gap-8">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-14 h-14 rounded-full bg-mint/20 flex items-center justify-center text-mint mb-1">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-light tracking-wide">Financial Atmosphere</h2>
+            <p className="text-xs text-white/40">Tap to unlock with biometrics</p>
+          </div>
+          <button
+            onPointerDown={handleBiometricPress}
+            className="w-20 h-20 rounded-full glass-button flex items-center justify-center text-mint active:scale-95 transition-all"
+          >
+            <Fingerprint className="w-9 h-9" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -2314,24 +2321,13 @@ function PinLockScreen({ pinHash, biometricEnabled, onUnlock }: { pinHash: strin
         <div className="grid grid-cols-3 gap-3 w-full">
           {keys.map((k, i) => {
             if (k === '') {
-              // Bottom-left: biometric button if available and enabled, else empty
               return biometryAvailable && biometricEnabled ? (
                 <button
                   key={i}
                   onPointerDown={handleBiometricPress}
                   className="h-16 rounded-2xl glass-button flex items-center justify-center text-white/50 hover:text-white active:scale-95 transition-all"
                 >
-                  {/* Fingerprint icon */}
-                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>
-                    <path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>
-                    <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>
-                    <path d="M2 12a10 10 0 0 1 18-6"/>
-                    <path d="M2 17a5 5 0 0 1 4.24-4.97"/>
-                    <path d="M3.34 22a10.2 10.2 0 0 1-.78-4"/>
-                    <path d="M8.65 22c.21-.66.45-1.32.57-2"/>
-                    <path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>
-                  </svg>
+                  {fingerprintIcon}
                 </button>
               ) : <div key={i} />;
             }
