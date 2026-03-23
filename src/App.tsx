@@ -194,6 +194,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const [isShareReportOpen, setIsShareReportOpen] = useState(false);
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('accentColor') || '#2dd4bf');
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
   const [hasOnboarded, setHasOnboarded] = useState(() => IS_DEMO || localStorage.getItem('hasOnboarded') === 'true');
@@ -1458,6 +1459,14 @@ export default function App() {
                   <h3 className="text-2xl font-light mb-2">Spending Analysis</h3>
                   <p className="text-white/70 text-sm tracking-widest uppercase">Visual breakdown by category</p>
                 </div>
+                <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsShareReportOpen(true)}
+                  className="glass-button px-4 py-2 flex items-center gap-2 text-xs uppercase tracking-widest text-white/70 hover:text-white"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Share Report
+                </button>
                 <div className="glass-panel p-1 flex gap-1">
                   <button 
                     onClick={() => setReportPeriod('monthly')}
@@ -1478,19 +1487,20 @@ export default function App() {
                     Yearly
                   </button>
                 </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="h-[280px] md:h-[400px]">
                   <h4 className="text-sm uppercase tracking-widest text-white/40 mb-4 md:mb-8 text-center">Category Distribution</h4>
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                    <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
                       <Pie
                         data={categoryData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={80}
-                        outerRadius={120}
+                        innerRadius={70}
+                        outerRadius={105}
                         paddingAngle={8}
                         dataKey="value"
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
@@ -1900,6 +1910,20 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Report Modal */}
+      <AnimatePresence>
+        {isShareReportOpen && (
+          <SpendingReportModal
+            transactions={transactions}
+            reportPeriod={reportPeriod}
+            categoryData={categoryData}
+            accentColor={accentColor}
+            isDarkMode={isDarkMode}
+            onClose={() => setIsShareReportOpen(false)}
+          />
         )}
       </AnimatePresence>
 
@@ -2476,6 +2500,211 @@ function PinSetupModal({ currentPinHash, onClose, onSave }: {
           })}
         </div>
       </motion.div>
+    </div>
+  );
+}
+
+// ===== SPENDING REPORT MODAL =====
+function SpendingReportModal({ transactions, reportPeriod, categoryData, accentColor, isDarkMode, onClose }: {
+  transactions: Transaction[];
+  reportPeriod: 'monthly' | 'yearly';
+  categoryData: { name: string; value: number }[];
+  accentColor: string;
+  isDarkMode: boolean;
+  onClose: () => void;
+}) {
+  const c = isDarkMode ? {
+    cardBg: 'linear-gradient(160deg, #0d1117 0%, #0f172a 100%)',
+    panelBg: '#1e293b',
+    heading: '#ffffff',
+    subtext: '#64748b',
+    dimtext: '#475569',
+    footertext: '#334155',
+    separator: '#1e293b',
+    html2canvasBg: '#0d1117',
+  } : {
+    cardBg: 'linear-gradient(160deg, #ffffff 0%, #f1f5f9 100%)',
+    panelBg: '#e2e8f0',
+    heading: '#0f172a',
+    subtext: '#64748b',
+    dimtext: '#94a3b8',
+    footertext: '#94a3b8',
+    separator: '#cbd5e1',
+    html2canvasBg: '#ffffff',
+  };
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
+
+  const now = new Date();
+  const periodLabel = reportPeriod === 'monthly' ? format(now, 'MMMM yyyy') : format(now, 'yyyy');
+  const start = reportPeriod === 'monthly' ? startOfMonth(now) : startOfYear(now);
+  const end   = reportPeriod === 'monthly' ? endOfMonth(now)   : endOfYear(now);
+
+  const periodTxs  = transactions.filter(t => isWithinInterval(parseISO(t.date), { start, end }));
+  const totalIncome  = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const totalExpense = periodTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const net = totalIncome - totalExpense;
+
+  const topCategories = [...categoryData].sort((a, b) => b.value - a.value).slice(0, 5);
+  const maxCat = topCategories[0]?.value || 1;
+  const CAT_COLORS = [accentColor, '#8b5cf6', '#f59e0b', '#f43f5e', '#3b82f6'];
+
+  const fmt = (v: number) => '$' + Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+  const handleShare = async () => {
+    if (!cardRef.current || sharing) return;
+    setSharing(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(cardRef.current, { scale: 3, useCORS: true, logging: false, backgroundColor: c.html2canvasBg });
+      const dataUrl = canvas.toDataURL('image/png');
+      try {
+        const { Share } = await import('@capacitor/share');
+        await Share.share({
+          title: `My ${periodLabel} Report`,
+          text: `I spent ${fmt(totalExpense)} in ${periodLabel} — Financial Atmosphere`,
+          files: [dataUrl],
+          dialogTitle: 'Share Spending Report',
+        });
+      } catch {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `report-${periodLabel}.png`;
+        a.click();
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80]" style={{ backgroundColor: '#000000e8' }} onClick={onClose}>
+      {/* Scrollable area with min-h-full centering trick */}
+      <div className="h-full overflow-y-auto px-5" onClick={e => e.stopPropagation()}>
+        <div className="min-h-full flex flex-col items-center justify-center py-8 gap-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: 12 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          className="w-full max-w-[340px] flex flex-col gap-4"
+        >
+          {/* ── Shareable card ── */}
+          <div
+            ref={cardRef}
+            style={{
+              background: c.cardBg,
+              fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+              borderRadius: 28,
+              overflow: 'hidden',
+              boxShadow: isDarkMode ? '0 32px 64px rgba(0,0,0,0.8)' : '0 32px 64px rgba(0,0,0,0.15)',
+            }}
+          >
+            <div style={{ padding: 24 }}>
+              {/* Header */}
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ color: c.dimtext, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 2, margin: '0 0 2px 0' }}>
+                  Financial Atmosphere
+                </p>
+                <p style={{ color: c.subtext, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4, margin: '0 0 4px 0' }}>
+                  {reportPeriod === 'monthly' ? 'Monthly Report' : 'Year in Review'}
+                </p>
+                <p style={{ color: c.heading, fontSize: 26, fontWeight: 300, lineHeight: 1.1, margin: 0 }}>
+                  {periodLabel}
+                </p>
+              </div>
+
+              {/* Net hero */}
+              <div style={{
+                background: c.panelBg,
+                borderRadius: 16,
+                padding: '14px 18px',
+                marginBottom: 12,
+              }}>
+                <p style={{ color: c.subtext, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6, margin: '0 0 6px 0' }}>
+                  Net Savings
+                </p>
+                <p style={{ color: net >= 0 ? accentColor : '#f43f5e', fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em', margin: 0 }}>
+                  {net < 0 ? '-' : '+'}{fmt(net)}
+                </p>
+              </div>
+
+              {/* Income / Spent */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+                {[
+                  { label: 'Income', value: totalIncome, color: '#34d399', icon: '↑' },
+                  { label: 'Spent',  value: totalExpense, color: '#fb923c', icon: '↓' },
+                ].map(({ label, value, color, icon }) => (
+                  <div key={label} style={{ flex: 1, background: c.panelBg, borderRadius: 14, padding: '11px 14px' }}>
+                    <p style={{ color: c.subtext, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 5, margin: '0 0 5px 0' }}>
+                      {icon} {label}
+                    </p>
+                    <p style={{ color, fontSize: 17, fontWeight: 600, margin: 0 }}>{fmt(value)}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Categories */}
+              {topCategories.length > 0 && (
+                <div>
+                  <p style={{ color: c.dimtext, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', margin: '0 0 10px 0' }}>
+                    Top Spending
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                    {topCategories.map((cat, i) => (
+                      <div key={cat.name}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                          <span style={{ color: c.subtext, fontSize: 12 }}>{cat.name}</span>
+                          <span style={{ color: c.heading, fontSize: 12, fontWeight: 600 }}>{fmt(cat.value)}</span>
+                        </div>
+                        <div style={{ height: 5, background: c.panelBg, borderRadius: 99 }}>
+                          <div style={{ height: 5, borderRadius: 99, width: `${Math.max((cat.value / maxCat) * 100, 4)}%`, background: CAT_COLORS[i] }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Footer */}
+              <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${c.separator}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p style={{ color: c.footertext, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', margin: 0 }}>
+                  {periodTxs.length} transactions
+                </p>
+                <p style={{ color: c.footertext, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', margin: 0 }}>
+                  FA
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons — always visible below card */}
+          <div className="flex gap-3 pb-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-3.5 rounded-2xl border border-white/10 text-xs uppercase tracking-widest text-white/40 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] transition-all"
+            >
+              Close
+            </button>
+            <button
+              onClick={handleShare}
+              disabled={sharing}
+              className="flex-1 py-3.5 rounded-2xl border text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+              style={{
+                color: accentColor,
+                borderColor: `${accentColor}50`,
+                background: `${accentColor}12`,
+              }}
+            >
+              {sharing
+                ? <div className="w-3 h-3 rounded-full border border-current border-t-transparent animate-spin" />
+                : <Download className="w-3.5 h-3.5" />}
+              {sharing ? 'Preparing…' : 'Share'}
+            </button>
+          </div>
+        </motion.div>
+        </div>
+      </div>
     </div>
   );
 }
